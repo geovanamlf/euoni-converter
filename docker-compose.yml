@@ -1,0 +1,18 @@
+services:
+  euoni-converter:
+    build: .
+    ports:
+      - "${EUONI_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATA_DIR: /data
+      MAX_WORKERS: 2
+      JOB_RETENTION_HOURS: 24
+      MAX_UPLOAD_SIZE: 2147483648
+    volumes:
+      - euoni-data:/data
+    restart: unless-stopped
+
+volumes:
+  euoni-data:

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Euoni Converter</title>
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #64717d;
+      --paper: #f4f0e8;
+      --panel: #fffdf8;
+      --line: #d9d4c9;
+      --coral: #e96f51;
+      --coral-dark: #b84e38;
+      --blue: #2456a6;
+      --blue-soft: #e6eefb;
+      --mint: #d9eee5;
+      --shadow: 0 20px 55px rgba(35, 42, 48, .12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: Georgia, 'Times New Roman', serif;
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .42;
+      background-image: radial-gradient(rgba(23, 32, 42, .07) .7px, transparent .7px);
+      background-size: 13px 13px;
+    }
+    button, select { font: inherit; }
+    .shell { position: relative; max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 46px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .02em; }
+    .mark { width: 18px; height: 18px; background: var(--coral); transform: rotate(45deg); display: inline-block; }
+    .brand span { font-size: 1.1rem; }
+    .status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font: 600 .75rem/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #44a878; box-shadow: 0 0 0 4px rgba(68, 168, 120, .15); }
+    .intro { max-width: 730px; margin-bottom: 30px; }
+    .eyebrow { color: var(--coral-dark); font: 700 .74rem/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { font-size: clamp(2.8rem, 7vw, 6.4rem); line-height: .9; letter-spacing: -.045em; font-weight: 400; margin: 18px 0 20px; max-width: 780px; }
+    .intro p { color: var(--muted); font: 400 1rem/1.6 ui-sans-serif, system-ui, sans-serif; max-width: 560px; margin: 0; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(290px, .8fr); gap: 18px; align-items: stretch; }
+    .dropzone { position: relative; min-height: 390px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 28px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+    .dropzone::after { content: ''; position: absolute; width: 210px; height: 210px; border: 1px solid var(--coral); border-radius: 50%; right: -90px; bottom: -80px; opacity: .45; }
+    .dropzone.is-over { border-color: var(--blue); background: #fbfdff; }
+    .drop-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .file-glyph { color: var(--blue); font: 400 4.5rem/1 Georgia, serif; }
+    .hint { color: var(--muted); font: .8rem/1.45 ui-sans-serif, system-ui, sans-serif; max-width: 190px; text-align: right; }
+    .drop-title { font-size: 2rem; font-weight: 400; margin: 0 0 8px; }
+    .drop-copy { color: var(--muted); font: .9rem/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0; }
+    .choose { display: inline-flex; align-items: center; justify-content: center; background: var(--ink); color: white; border: 0; padding: 14px 20px; cursor: pointer; font: 700 .8rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; transition: transform .2s, background .2s; }
+    .choose:hover { background: var(--blue); transform: translateY(-2px); }
+    .settings { background: var(--ink); color: white; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; min-height: 390px; }
+    .settings h2 { font-size: 1.9rem; font-weight: 400; margin: 0; }
+    .settings-note { color: #aeb8c3; font: .85rem/1.5 ui-sans-serif, system-ui, sans-serif; margin-top: 10px; }
+    label { display: block; color: #aeb8c3; font: 700 .7rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 9px; }
+    select { width: 100%; appearance: none; color: white; background: #28333f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='m3 5 4 4 4-4' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center; border: 1px solid #485663; padding: 13px 38px 13px 14px; outline: none; }
+    select:focus { border-color: var(--coral); }
+    .convert { width: 100%; border: 0; color: white; background: var(--coral); padding: 15px; cursor: pointer; font: 700 .8rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; transition: background .2s, transform .2s; }
+    .convert:hover:not(:disabled) { background: var(--coral-dark); transform: translateY(-2px); }
+    .convert:disabled { opacity: .4; cursor: not-allowed; }
+    .file-pill { display: none; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; font: .86rem ui-sans-serif, system-ui, sans-serif; }
+    .file-pill.visible { display: flex; }
+    .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-size { color: var(--muted); flex: none; }
+    .activity { margin-top: 42px; border-top: 1px solid var(--line); padding-top: 20px; }
+    .activity-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .activity h2 { margin: 0; font-size: 1.45rem; font-weight: 400; }
+    .activity-count { color: var(--muted); font: .75rem ui-sans-serif, system-ui, sans-serif; }
+    .empty { color: var(--muted); font: .9rem/1.5 ui-sans-serif, system-ui, sans-serif; padding: 20px 0; }
+    .job { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; background: rgba(255, 253, 248, .68); border-bottom: 1px solid var(--line); padding: 15px 0; animation: arrive .35s ease both; }
+    .job-file { font: 600 .9rem ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .job-route { color: var(--muted); font: .78rem ui-sans-serif, system-ui, sans-serif; margin-top: 5px; }
+    .job-state { font: 700 .68rem ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; }
+    .job-state.completed { color: #2e8a61; }
+    .job-state.failed { color: #b84e38; }
+    .job-state.processing, .job-state.queued { color: var(--blue); }
+    .job-progress { width: 100px; height: 5px; background: #ddd8ce; overflow: hidden; }
+    .job-progress span { display: block; height: 100%; background: var(--blue); transition: width .35s ease; }
+    .download { color: var(--blue); font: 700 .72rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; text-decoration: none; }
+    .download:hover { color: var(--coral-dark); }
+    @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 760px) {
+      .shell { padding: 22px 16px 40px; }
+      header { margin-bottom: 34px; }
+      .status { font-size: .63rem; }
+      h1 { font-size: 3.6rem; }
+      .workspace { grid-template-columns: 1fr; }
+      .dropzone, .settings { min-height: 330px; }
+      .job { grid-template-columns: 1fr auto; gap: 9px 14px; }
+      .job-progress { grid-column: 1 / -1; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><i class="mark" aria-hidden="true"></i><span>euoni / local</span></div>
+      <div class="status"><i class="status-dot" aria-hidden="true"></i><span id="server-status">Conversor Online</span></div>
+    </header>
+
+    <section class="intro">
+      <div class="eyebrow">Conversão de arquivos</div>
+      <h1>Seu arquivo.<br>Outro formato.</h1>
+    
+    </section>
+
+    <section class="workspace" aria-label="Nova conversao">
+      <div class="dropzone" id="dropzone">
+        <div>
+          <div class="drop-top"><span class="file-glyph" aria-hidden="true">↳</span><span class="hint"></span></div>
+          <h2 class="drop-title">Solte um arquivo aqui.</h2>
+          <p class="drop-copy">Ou escolha um arquivo do seu computador para começar.</p>
+          <input id="file-input" type="file" hidden>
+          <button class="choose" id="choose-button" type="button">Escolher arquivo</button>
+          <div class="file-pill" id="file-pill"><span class="file-name" id="file-name"></span><span class="file-size" id="file-size"></span></div>
+        </div>
+        <div class="drop-copy">PNG · JPG · WEBP · PDF · MP3 · WAV · MP4 e mais</div>
+      </div>
+
+      <form class="settings" id="convert-form">
+        <div>
+          <h2>Destino</h2>
+          <p class="settings-note">Escolha o formato final.</p>
+        </div>
+        <div>
+          <label for="format">Converter para</label>
+          <select id="format" name="to" disabled><option>Escolha um arquivo primeiro</option></select>
+        </div>
+        <button class="convert" id="convert-button" type="submit" disabled>Converter arquivo</button>
+      </form>
+    </section>
+
+    <section class="activity" aria-live="polite">
+      <div class="activity-head"><h2>Atividade recente</h2><span class="activity-count" id="activity-count">nenhum job ainda</span></div>
+      <div id="jobs"><div class="empty">As conversoes desta sessão aparecem aqui.</div></div>
+    </section>
+  </main>
+
+  <script>
+    const input = document.querySelector('#file-input');
+    const dropzone = document.querySelector('#dropzone');
+    const choose = document.querySelector('#choose-button');
+    const form = document.querySelector('#convert-form');
+    const format = document.querySelector('#format');
+    const convert = document.querySelector('#convert-button');
+    const pill = document.querySelector('#file-pill');
+    const fileName = document.querySelector('#file-name');
+    const fileSize = document.querySelector('#file-size');
+    const jobs = new Map();
+
+    choose.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => setFile(input.files[0]));
+    ['dragenter', 'dragover'].forEach(event => dropzone.addEventListener(event, event => { event.preventDefault(); dropzone.classList.add('is-over'); }));
+    ['dragleave', 'drop'].forEach(event => dropzone.addEventListener(event, event => { event.preventDefault(); dropzone.classList.remove('is-over'); }));
+    dropzone.addEventListener('drop', event => setFile(event.dataTransfer.files[0]));
+
+    function setFile(file) {
+      if (!file) return;
+      input.files = createFileList(file);
+      fileName.textContent = file.name;
+      fileSize.textContent = formatBytes(file.size);
+      pill.classList.add('visible');
+      updateTargetOptions(extension(file.name));
+      convert.disabled = false;
+    }
+    function createFileList(file) {
+      const transfer = new DataTransfer(); transfer.items.add(file); return transfer.files;
+    }
+    function formatBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+    function extension(name) { return name.split('.').pop().toLowerCase(); }
+    const targetMatrix = {
+      png: ['jpg', 'webp', 'pdf'], jpg: ['png', 'webp', 'pdf'], jpeg: ['png', 'webp', 'pdf'], webp: ['png', 'jpg', 'pdf'],
+      wav: ['mp3'], mp3: ['wav'], ogg: ['mp3', 'wav'], flac: ['mp3', 'wav'], aac: ['mp3', 'wav'], m4a: ['mp3', 'wav'],
+      mp4: ['mp4', 'mp3', 'wav'], mkv: ['mp4', 'mp3', 'wav'], mov: ['mp4', 'mp3', 'wav'], avi: ['mp4', 'mp3', 'wav'], webm: ['mp4', 'mp3', 'wav'],
+      pdf: ['png', 'jpg']
+    };
+    function updateTargetOptions(source) {
+      const targets = targetMatrix[source] || [];
+      format.innerHTML = targets.length
+        ? targets.map(target => `<option value="${target}">${target.toUpperCase()}</option>`).join('')
+        : '<option>Formato não suportado</option>';
+      format.disabled = !targets.length;
+      convert.disabled = !targets.length;
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const file = input.files[0]; if (!file) return;
+      convert.disabled = true; convert.textContent = 'Enviando...';
+      const body = new FormData(); body.append('file', file); body.append('to', format.value);
+      try {
+        const response = await fetch('/api/upload', { method: 'POST', body });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha no upload');
+        jobs.set(result.job_id, { id: result.job_id, name: result.filename, from: extension(result.filename), to: format.value, status: 'queued', progress: 0 });
+        renderJobs(); poll(result.job_id);
+        input.value = ''; pill.classList.remove('visible'); convert.textContent = 'Converter arquivo'; convert.disabled = true;
+      } catch (error) {
+        convert.textContent = error.message; setTimeout(() => { convert.textContent = 'Converter arquivo'; convert.disabled = false; }, 2500);
+      }
+    });
+
+    async function poll(id) {
+      const job = jobs.get(id); if (!job) return;
+      try {
+        const response = await fetch(`/api/jobs/${id}/status`); const status = await response.json();
+        Object.assign(job, { status: status.status, progress: status.progress, error: status.error }); renderJobs();
+        if (status.status === 'completed' || status.status === 'failed') return;
+        setTimeout(() => poll(id), 700);
+      } catch (_) { setTimeout(() => poll(id), 1500); }
+    }
+    function renderJobs() {
+      const container = document.querySelector('#jobs'); const list = [...jobs.values()].reverse();
+      document.querySelector('#activity-count').textContent = list.length === 1 ? '1 job' : `${list.length} jobs`;
+      if (!list.length) { container.innerHTML = '<div class="empty">As conversoes desta sessao aparecem aqui.</div>'; return; }
+      container.innerHTML = list.map(job => `<article class="job"><div><div class="job-file">${escapeHtml(job.name)}</div><div class="job-route">${escapeHtml(job.from.toUpperCase())} → ${escapeHtml(job.to.toUpperCase())}${job.error ? ` · ${escapeHtml(job.error)}` : ''}</div></div><div><div class="job-state ${job.status}">${label(job.status)}</div><div class="job-progress"><span style="width:${job.progress}%"></span></div></div>${job.status === 'completed' ? `<a class="download" href="/api/jobs/${job.id}/download">Baixar</a>` : '<span></span>'}</article>`).join('');
+    }
+    function label(status) { return ({ queued: 'na fila', processing: 'convertendo', completed: 'pronto', failed: 'falhou' })[status] || status; }
+    function escapeHtml(value) { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
+    renderJobs();
+  </script>
+</body>
+</html>
