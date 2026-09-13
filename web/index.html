@@ -3,146 +3,1125 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Euoni Converter</title>
+  <meta name="theme-color" content="#f7eadc">
+  <title>Euoni / Conversor</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  >
+
   <style>
     :root {
-      --ink: #17202a;
-      --muted: #64717d;
-      --paper: #f4f0e8;
-      --panel: #fffdf8;
-      --line: #d9d4c9;
-      --coral: #e96f51;
-      --coral-dark: #b84e38;
-      --blue: #2456a6;
-      --blue-soft: #e6eefb;
-      --mint: #d9eee5;
-      --shadow: 0 20px 55px rgba(35, 42, 48, .12);
+      --bg: #f7eadc;
+      --paper: #fffdf9;
+      --paper-soft: rgba(255, 253, 249, .82);
+      --ink: #171b20;
+      --muted: #706c68;
+      --line: rgba(32, 28, 25, .14);
+      --orange: #ed711d;
+      --orange-dark: #c95a14;
+      --orange-soft: #f5a56f;
+      --green: #2b9850;
+      --dark: #252525;
+      --dark-field: #303b44;
+      --dark-line: #5a6268;
+      --max-width: 1335px;
+      --radius: 18px;
+      --shadow: 0 20px 45px rgba(72, 47, 30, .12);
     }
 
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      background: var(--paper);
-      font-family: Georgia, 'Times New Roman', serif;
-      min-height: 100vh;
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
     }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--ink);
+      font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 75% 18%, rgba(255,255,255,.55), transparent 25%),
+        radial-gradient(circle at 18% 62%, rgba(255,177,113,.13), transparent 30%),
+        var(--bg);
+    }
+
     body::before {
-      content: '';
+      content: "";
       position: fixed;
       inset: 0;
+      z-index: -3;
       pointer-events: none;
-      opacity: .42;
-      background-image: radial-gradient(rgba(23, 32, 42, .07) .7px, transparent .7px);
-      background-size: 13px 13px;
+      opacity: .34;
+      background-image:
+        radial-gradient(rgba(80,53,35,.075) .7px, transparent .7px),
+        linear-gradient(rgba(255,255,255,.22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.22) 1px, transparent 1px);
+      background-size: 13px 13px, 76px 76px, 76px 76px;
     }
-    button, select { font: inherit; }
-    .shell { position: relative; max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; }
-    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 46px; }
-    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .02em; }
-    .mark { width: 18px; height: 18px; background: var(--coral); transform: rotate(45deg); display: inline-block; }
-    .brand span { font-size: 1.1rem; }
-    .status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font: 600 .75rem/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #44a878; box-shadow: 0 0 0 4px rgba(68, 168, 120, .15); }
-    .intro { max-width: 730px; margin-bottom: 30px; }
-    .eyebrow { color: var(--coral-dark); font: 700 .74rem/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .18em; text-transform: uppercase; }
-    h1 { font-size: clamp(2.8rem, 7vw, 6.4rem); line-height: .9; letter-spacing: -.045em; font-weight: 400; margin: 18px 0 20px; max-width: 780px; }
-    .intro p { color: var(--muted); font: 400 1rem/1.6 ui-sans-serif, system-ui, sans-serif; max-width: 560px; margin: 0; }
-    .workspace { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(290px, .8fr); gap: 18px; align-items: stretch; }
-    .dropzone { position: relative; min-height: 390px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 28px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
-    .dropzone::after { content: ''; position: absolute; width: 210px; height: 210px; border: 1px solid var(--coral); border-radius: 50%; right: -90px; bottom: -80px; opacity: .45; }
-    .dropzone.is-over { border-color: var(--blue); background: #fbfdff; }
-    .drop-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-    .file-glyph { color: var(--blue); font: 400 4.5rem/1 Georgia, serif; }
-    .hint { color: var(--muted); font: .8rem/1.45 ui-sans-serif, system-ui, sans-serif; max-width: 190px; text-align: right; }
-    .drop-title { font-size: 2rem; font-weight: 400; margin: 0 0 8px; }
-    .drop-copy { color: var(--muted); font: .9rem/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0; }
-    .choose { display: inline-flex; align-items: center; justify-content: center; background: var(--ink); color: white; border: 0; padding: 14px 20px; cursor: pointer; font: 700 .8rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; transition: transform .2s, background .2s; }
-    .choose:hover { background: var(--blue); transform: translateY(-2px); }
-    .settings { background: var(--ink); color: white; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; min-height: 390px; }
-    .settings h2 { font-size: 1.9rem; font-weight: 400; margin: 0; }
-    .settings-note { color: #aeb8c3; font: .85rem/1.5 ui-sans-serif, system-ui, sans-serif; margin-top: 10px; }
-    label { display: block; color: #aeb8c3; font: 700 .7rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 9px; }
-    select { width: 100%; appearance: none; color: white; background: #28333f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='m3 5 4 4 4-4' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center; border: 1px solid #485663; padding: 13px 38px 13px 14px; outline: none; }
-    select:focus { border-color: var(--coral); }
-    .convert { width: 100%; border: 0; color: white; background: var(--coral); padding: 15px; cursor: pointer; font: 700 .8rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; transition: background .2s, transform .2s; }
-    .convert:hover:not(:disabled) { background: var(--coral-dark); transform: translateY(-2px); }
-    .convert:disabled { opacity: .4; cursor: not-allowed; }
-    .file-pill { display: none; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; font: .86rem ui-sans-serif, system-ui, sans-serif; }
-    .file-pill.visible { display: flex; }
-    .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-size { color: var(--muted); flex: none; }
-    .activity { margin-top: 42px; border-top: 1px solid var(--line); padding-top: 20px; }
-    .activity-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-    .activity h2 { margin: 0; font-size: 1.45rem; font-weight: 400; }
-    .activity-count { color: var(--muted); font: .75rem ui-sans-serif, system-ui, sans-serif; }
-    .empty { color: var(--muted); font: .9rem/1.5 ui-sans-serif, system-ui, sans-serif; padding: 20px 0; }
-    .job { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; background: rgba(255, 253, 248, .68); border-bottom: 1px solid var(--line); padding: 15px 0; animation: arrive .35s ease both; }
-    .job-file { font: 600 .9rem ui-sans-serif, system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .job-route { color: var(--muted); font: .78rem ui-sans-serif, system-ui, sans-serif; margin-top: 5px; }
-    .job-state { font: 700 .68rem ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; }
-    .job-state.completed { color: #2e8a61; }
-    .job-state.failed { color: #b84e38; }
-    .job-state.processing, .job-state.queued { color: var(--blue); }
-    .job-progress { width: 100px; height: 5px; background: #ddd8ce; overflow: hidden; }
-    .job-progress span { display: block; height: 100%; background: var(--blue); transition: width .35s ease; }
-    .download { color: var(--blue); font: 700 .72rem ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; text-decoration: none; }
-    .download:hover { color: var(--coral-dark); }
-    @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    button,
+    select,
+    input {
+      font: inherit;
+    }
+
+    button,
+    select {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .page {
+      width: min(100%, var(--max-width));
+      margin: 0 auto;
+      padding: 24px 28px 56px;
+    }
+
+    /* Decorative background */
+    .decor {
+      position: fixed;
+      z-index: -1;
+      pointer-events: none;
+      opacity: .72;
+    }
+
+    .dots {
+      width: 72px;
+      height: 72px;
+      background-image: radial-gradient(var(--orange-soft) 1.4px, transparent 1.4px);
+      background-size: 11px 11px;
+    }
+
+    .dots.one {
+      top: 18px;
+      right: 28px;
+    }
+
+    .dots.two {
+      left: 12px;
+      top: 61%;
+      opacity: .48;
+    }
+
+    .dots.three {
+      right: 28px;
+      bottom: 48px;
+      opacity: .45;
+    }
+
+    .orbit {
+      width: 520px;
+      height: 220px;
+      right: -180px;
+      bottom: -90px;
+      border: 1px solid rgba(237,113,29,.13);
+      border-radius: 50%;
+      transform: rotate(-17deg);
+    }
+
+    .orbit::after {
+      content: "";
+      position: absolute;
+      inset: 30px -24px -32px 48px;
+      border: 1px solid rgba(237,113,29,.08);
+      border-radius: 50%;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 13px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      position: relative;
+      width: 26px;
+      height: 26px;
+      flex: 0 0 26px;
+      transform: rotate(45deg);
+      border: 4px solid var(--orange);
+      background: transparent;
+    }
+
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border: 2px solid var(--orange);
+    }
+
+    .brand-name {
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -.025em;
+    }
+
+    .brand-divider {
+      display: none;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: #1c6d37;
+      font-size: .74rem;
+      font-weight: 800;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(43,152,80,.12);
+    }
+
+    .menu-button {
+      display: none;
+      width: 42px;
+      height: 42px;
+      padding: 7px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .menu-button span,
+    .menu-button::before,
+    .menu-button::after {
+      display: block;
+      width: 100%;
+      height: 3px;
+      margin: 5px 0;
+      content: "";
+      background: var(--ink);
+    }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      padding: 54px 0 0;
+    }
+
+    .hero-intro {
+      position: relative;
+      z-index: 3;
+      width: 55%;
+      max-width: 620px;
+    }
+
+    .eyebrow {
+      margin: 0 0 13px;
+      color: var(--orange-dark);
+      font-size: .74rem;
+      font-weight: 800;
+      letter-spacing: .17em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 620px;
+      margin: 0;
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: clamp(4.8rem, 7vw, 6.55rem);
+      font-weight: 400;
+      line-height: .9;
+      letter-spacing: -.06em;
+    }
+
+    .hero-copy {
+      max-width: 510px;
+      margin: 17px 0 0;
+      color: #4f4d4a;
+      font-size: 1.1rem;
+      line-height: 1.55;
+    }
+
+    /* Character */
+    .character-stage {
+      position: absolute;
+      z-index: 1;
+      top: -8px;
+      right: -105px;
+      width: 565px;
+      height: 640px;
+      pointer-events: none;
+    }
+
+    .character-stage::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      top: 112px;
+      right: 54px;
+      width: 410px;
+      height: 410px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, rgba(255,170,91,.72) 0 42%, rgba(245,165,111,.28) 64%, transparent 65%);
+      opacity: .95;
+    }
+
+    .character-stage::after {
+      content: "";
+      position: absolute;
+      top: 82px;
+      left: 0;
+      width: 40px;
+      height: 40px;
+      transform: rotate(45deg);
+      background: var(--orange);
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+      box-shadow: 0 0 0 9px rgba(237,113,29,.04);
+    }
+
+    .character {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: bottom center;
+      filter: drop-shadow(0 18px 18px rgba(58,36,22,.13));
+      user-select: none;
+    }
+
+    /* Main conversion workspace */
+    .workspace {
+      position: relative;
+      z-index: 4;
+      display: grid;
+      grid-template-columns: minmax(0, 1.18fr) minmax(350px, .82fr);
+      gap: 20px;
+      align-items: stretch;
+      margin-top: 25px;
+    }
+
+    .dropzone {
+      position: relative;
+      min-height: 286px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      padding: 36px 39px 29px;
+      border: 2px dashed rgba(127,91,62,.24);
+      border-radius: var(--radius);
+      background: var(--paper-soft);
+      box-shadow: 0 15px 35px rgba(87,57,35,.08);
+      cursor: pointer;
+      transition: border-color .2s ease, background .2s ease, transform .2s ease;
+    }
+
+    .dropzone:hover {
+      border-color: rgba(237,113,29,.52);
+      background: rgba(255,253,249,.95);
+    }
+
+    .dropzone.is-over {
+      border-color: var(--orange);
+      background: #fff9f3;
+      transform: translateY(-2px);
+    }
+
+    .dropzone::after {
+      content: "";
+      position: absolute;
+      right: -135px;
+      bottom: -140px;
+      width: 255px;
+      height: 255px;
+      border: 1px solid rgba(237,113,29,.34);
+      border-radius: 50%;
+    }
+
+    .drop-content {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      column-gap: 20px;
+      align-items: start;
+    }
+
+    .upload-icon {
+      width: 38px;
+      height: 48px;
+      margin-top: 1px;
+      color: #7c7770;
+    }
+
+    .drop-title {
+      margin: 0 0 7px;
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: clamp(1.55rem, 2.3vw, 2rem);
+      font-weight: 500;
+      line-height: 1.1;
+      letter-spacing: -.025em;
+    }
+
+    .drop-copy {
+      max-width: 390px;
+      margin: 0;
+      color: var(--muted);
+      font-size: .98rem;
+      line-height: 1.55;
+    }
+
+    .choose {
+      min-height: 52px;
+      margin-top: 22px;
+      padding: 0 28px;
+      border: 0;
+      border-radius: 10px;
+      color: #fff;
+      background: #18191b;
+      box-shadow: 0 8px 18px rgba(0,0,0,.12);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 800;
+      letter-spacing: .055em;
+      text-transform: uppercase;
+      transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
+    }
+
+    .choose:hover,
+    .choose:focus-visible {
+      background: #303236;
+      transform: translateY(-2px);
+      box-shadow: 0 11px 22px rgba(0,0,0,.15);
+      outline: none;
+    }
+
+    .file-pill {
+      position: relative;
+      z-index: 1;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 10px 12px;
+      border: 1px solid rgba(23,27,32,.1);
+      border-radius: 9px;
+      background: rgba(255,255,255,.75);
+      font-size: .8rem;
+    }
+
+    .file-pill.visible {
+      display: flex;
+    }
+
+    .file-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .file-size {
+      flex: none;
+      color: var(--muted);
+    }
+
+    .formats {
+      position: relative;
+      z-index: 1;
+      margin-top: 25px;
+      color: #706a64;
+      font-size: .77rem;
+      letter-spacing: .015em;
+    }
+
+    /* Destination card */
+    .settings {
+      position: relative;
+      z-index: 5;
+      min-height: 286px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 26px 30px 25px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 90% 0%, rgba(255,255,255,.05), transparent 34%),
+        linear-gradient(145deg, #292929, #222);
+      border: 1px solid rgba(255,157,91,.9);
+      border-radius: var(--radius);
+      box-shadow:
+        0 0 0 2px rgba(237,113,29,.08),
+        0 0 22px rgba(237,113,29,.22),
+        0 20px 44px rgba(53,32,21,.17);
+    }
+
+    .settings h2 {
+      margin: 0;
+      color: var(--orange);
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.7rem;
+      font-weight: 500;
+      letter-spacing: -.02em;
+    }
+
+    .settings-note {
+      margin: 5px 0 0;
+      color: #d1d1d1;
+      font-size: .9rem;
+      line-height: 1.5;
+    }
+
+    .settings-divider {
+      height: 1px;
+      margin: 19px 0 22px;
+      background: rgba(255,255,255,.22);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 9px;
+      color: #f1f1f1;
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .075em;
+      text-transform: uppercase;
+    }
+
+    .select-wrap {
+      position: relative;
+    }
+
+    select {
+      width: 100%;
+      min-height: 52px;
+      appearance: none;
+      padding: 0 45px 0 14px;
+      border: 1px solid var(--dark-line);
+      border-radius: 8px;
+      outline: none;
+      color: #f8f8f8;
+      background: var(--dark-field);
+      cursor: pointer;
+      font-size: .9rem;
+      transition: border-color .2s ease, background .2s ease;
+    }
+
+    select:hover:not(:disabled),
+    select:focus {
+      border-color: var(--orange-soft);
+      background: #343f48;
+    }
+
+    select:disabled {
+      color: #d7d7d7;
+      cursor: not-allowed;
+      opacity: .92;
+    }
+
+    .select-arrow {
+      position: absolute;
+      top: 50%;
+      right: 17px;
+      width: 10px;
+      height: 10px;
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: translateY(-65%) rotate(45deg);
+      pointer-events: none;
+    }
+
+    .convert {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 21px;
+      border: 0;
+      border-radius: 8px;
+      color: #fff;
+      background: linear-gradient(180deg, #ee7620, #df6616);
+      box-shadow: 0 8px 18px rgba(237,113,29,.2);
+      cursor: pointer;
+      font-size: .82rem;
+      font-weight: 800;
+      letter-spacing: .055em;
+      text-transform: uppercase;
+      transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
+    }
+
+    .convert:hover:not(:disabled),
+    .convert:focus-visible:not(:disabled) {
+      background: linear-gradient(180deg, #f27d2b, #cf5c12);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 25px rgba(237,113,29,.28);
+      outline: none;
+    }
+
+    .convert:disabled {
+      color: rgba(255,255,255,.52);
+      background: #714638;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* Activity */
+    .activity {
+      position: relative;
+      z-index: 2;
+      margin-top: 58px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+    }
+
+    .activity-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 13px;
+    }
+
+    .activity h2 {
+      margin: 0;
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.8rem;
+      font-weight: 500;
+      letter-spacing: -.025em;
+    }
+
+    .activity-count {
+      color: var(--muted);
+      font-size: .76rem;
+    }
+
+    #jobs {
+      min-height: 0;
+    }
+
+    .empty {
+      display: flex;
+      min-height: 160px;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      border: 1px solid rgba(32,28,25,.09);
+      border-radius: 14px;
+      background: rgba(255,253,249,.42);
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .job {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 18px;
+      align-items: center;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--line);
+      animation: arrive .35s ease both;
+    }
+
+    .job-file {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .job-route {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .77rem;
+    }
+
+    .job-state {
+      margin-bottom: 7px;
+      font-size: .68rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .job-state.completed { color: #24834b; }
+    .job-state.failed { color: #b54c2c; }
+    .job-state.processing,
+    .job-state.queued { color: #3e69a8; }
+
+    .job-progress {
+      width: 100px;
+      height: 4px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: rgba(23,27,32,.11);
+    }
+
+    .job-progress span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--orange);
+      transition: width .35s ease;
+    }
+
+    .download {
+      color: var(--orange-dark);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .download:hover {
+      color: var(--ink);
+    }
+
+    @keyframes arrive {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    /* Tablet */
+    @media (max-width: 1080px) {
+      :root {
+        --max-width: 100%;
+      }
+
+      .page {
+        padding-inline: 24px;
+      }
+
+      .hero-intro {
+        width: 60%;
+      }
+
+      .character-stage {
+        right: -78px;
+        top: -4px;
+        width: 485px;
+        height: 570px;
+      }
+
+      .character-stage::before {
+        width: 350px;
+        height: 350px;
+        right: 35px;
+      }
+
+      .workspace {
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr);
+        gap: 18px;
+      }
+    }
+
+    /* Mobile */
     @media (max-width: 760px) {
-      .shell { padding: 22px 16px 40px; }
-      header { margin-bottom: 34px; }
-      .status { font-size: .63rem; }
-      h1 { font-size: 3.6rem; }
-      .workspace { grid-template-columns: 1fr; }
-      .dropzone, .settings { min-height: 330px; }
-      .job { grid-template-columns: 1fr auto; gap: 9px 14px; }
-      .job-progress { grid-column: 1 / -1; width: 100%; }
+      .page {
+        padding: 0 16px 38px;
+      }
+
+      .header {
+        min-height: 74px;
+        padding: 0;
+      }
+
+      .brand {
+        gap: 11px;
+      }
+
+      .brand-mark {
+        width: 24px;
+        height: 24px;
+        flex-basis: 24px;
+      }
+
+      .brand-name {
+        font-size: 1.08rem;
+      }
+
+      .status {
+        margin-left: auto;
+        margin-right: 2px;
+        font-size: .62rem;
+      }
+
+      .menu-button {
+        display: block;
+        flex: 0 0 42px;
+      }
+
+      .hero {
+        padding-top: 56px;
+      }
+
+      .hero-intro {
+        width: 68%;
+        max-width: none;
+      }
+
+      .eyebrow {
+        margin-bottom: 14px;
+        font-size: .67rem;
+        letter-spacing: .15em;
+      }
+
+      h1 {
+        max-width: 100%;
+        font-size: clamp(3.35rem, 15vw, 5rem);
+        line-height: .9;
+      }
+
+      .hero-copy {
+        max-width: 310px;
+        margin-top: 17px;
+        font-size: .98rem;
+        line-height: 1.5;
+      }
+
+      .character-stage {
+        top: 0;
+        right: -65px;
+        width: 360px;
+        height: 430px;
+      }
+
+      .character-stage::before {
+        top: 78px;
+        right: 18px;
+        width: 290px;
+        height: 290px;
+      }
+
+      .character-stage::after {
+        top: 70px;
+        left: 55px;
+        width: 34px;
+        height: 34px;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        margin-top: 43px;
+      }
+
+      .dropzone {
+        min-height: 360px;
+        padding: 30px 24px 24px;
+      }
+
+      .drop-content {
+        grid-template-columns: 40px minmax(0, 1fr);
+        column-gap: 15px;
+      }
+
+      .upload-icon {
+        width: 32px;
+        height: 41px;
+      }
+
+      .drop-title {
+        font-size: 1.52rem;
+      }
+
+      .drop-copy {
+        max-width: 300px;
+        font-size: .9rem;
+      }
+
+      .choose {
+        width: min(100%, 255px);
+        min-height: 50px;
+      }
+
+      .formats {
+        font-size: .7rem;
+        line-height: 1.5;
+      }
+
+      .settings {
+        min-height: 325px;
+        padding: 27px 24px 24px;
+      }
+
+      .activity {
+        margin-top: 40px;
+        padding-top: 20px;
+      }
+
+      .activity h2 {
+        font-size: 1.55rem;
+      }
+
+      .empty {
+        min-height: 155px;
+      }
+
+      .job {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px 14px;
+      }
+
+      .job-progress {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+
+      .dots.one {
+        top: 95px;
+        right: -7px;
+      }
+
+      .dots.two {
+        left: -18px;
+        top: 58%;
+      }
+
+      .dots.three,
+      .orbit {
+        display: none;
+      }
+    }
+
+    @media (max-width: 470px) {
+      .status {
+        width: 9px;
+        overflow: visible;
+      }
+
+      .status > span:not(.status-dot) {
+        display: none;
+      }
+
+      .hero {
+        padding-top: 50px;
+      }
+
+      .hero-intro {
+        width: 70%;
+      }
+
+      h1 {
+        font-size: clamp(3rem, 15.7vw, 4rem);
+      }
+
+      .hero-copy {
+        max-width: 265px;
+        font-size: .9rem;
+      }
+
+      .character-stage {
+        right: -92px;
+        width: 330px;
+        height: 395px;
+      }
+
+      .character-stage::before {
+        width: 265px;
+        height: 265px;
+      }
+
+      .workspace {
+        margin-top: 38px;
+      }
+
+      .dropzone {
+        min-height: 335px;
+        padding: 27px 21px 22px;
+      }
+
+      .drop-content {
+        grid-template-columns: 34px minmax(0, 1fr);
+        column-gap: 11px;
+      }
+
+      .drop-title {
+        font-size: 1.42rem;
+      }
+
+      .choose {
+        width: 100%;
+      }
+
+      .settings {
+        padding: 25px 20px 20px;
+      }
+
+      .activity-head {
+        align-items: flex-start;
+      }
+
+      .activity-count {
+        padding-top: 3px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+      }
     }
   </style>
 </head>
+
 <body>
-  <main class="shell">
-    <header>
-      <div class="brand"><i class="mark" aria-hidden="true"></i><span>euoni / local</span></div>
-      <div class="status"><i class="status-dot" aria-hidden="true"></i><span id="server-status">Conversor Online</span></div>
-    </header>
+  <div class="decor dots one" aria-hidden="true"></div>
+  <div class="decor dots two" aria-hidden="true"></div>
+  <div class="decor dots three" aria-hidden="true"></div>
+  <div class="decor orbit" aria-hidden="true"></div>
 
-    <section class="intro">
-      <div class="eyebrow">Conversão de arquivos</div>
-      <h1>Seu arquivo.<br>Outro formato.</h1>
-    
-    </section>
+  <main class="page">
+    <header class="header">
+      <a class="brand" href="#" aria-label="Euoni Conversor">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Euoni / Conversor</span>
+      </a>
 
-    <section class="workspace" aria-label="Nova conversao">
-      <div class="dropzone" id="dropzone">
-        <div>
-          <div class="drop-top"><span class="file-glyph" aria-hidden="true">↳</span><span class="hint"></span></div>
-          <h2 class="drop-title">Solte um arquivo aqui.</h2>
-          <p class="drop-copy">Ou escolha um arquivo do seu computador para começar.</p>
-          <input id="file-input" type="file" hidden>
-          <button class="choose" id="choose-button" type="button">Escolher arquivo</button>
-          <div class="file-pill" id="file-pill"><span class="file-name" id="file-name"></span><span class="file-size" id="file-size"></span></div>
-        </div>
-        <div class="drop-copy">PNG · JPG · WEBP · PDF · MP3 · WAV · MP4 e mais</div>
+      <div class="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="server-status">Conversor online</span>
       </div>
 
-      <form class="settings" id="convert-form">
-        <div>
-          <h2>Destino</h2>
-          <p class="settings-note">Escolha o formato final.</p>
+      <button class="menu-button" type="button" aria-label="Abrir menu">
+        <span></span>
+      </button>
+    </header>
+
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-intro">
+        <p class="eyebrow">Conversão de arquivos</p>
+        <h1 id="page-title">Arquivo-kun.</h1>
+        <p class="hero-copy">
+          Transforme seus arquivos de forma simples,<br class="desktop-break">
+          rápida e sem complicação.
+        </p>
+      </div>
+
+      <div class="character-stage" aria-hidden="true">
+        <img
+          class="character"
+          src="assets/character.png"
+          alt=""
+          draggable="false"
+        >
+      </div>
+
+      <section class="workspace" aria-label="Nova conversão">
+        <div
+          class="dropzone"
+          id="dropzone"
+          role="button"
+          tabindex="0"
+          aria-label="Área para enviar um arquivo"
+        >
+          <div>
+            <div class="drop-content">
+              <svg class="upload-icon" viewBox="0 0 40 50" fill="none" aria-hidden="true">
+                <path d="M9 48V6.5C9 5.12 10.12 4 11.5 4H27L35 12V48H9Z" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M27 4V13H35" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M22 35V21M22 21L17 26M22 21L27 26" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+
+              <div>
+                <h2 class="drop-title">Solte um arquivo aqui.</h2>
+                <p class="drop-copy">
+                  Ou escolha um arquivo do seu computador para começar.
+                </p>
+
+                <input id="file-input" type="file" hidden>
+
+                <button class="choose" id="choose-button" type="button">
+                  Escolher arquivo
+                </button>
+
+                <div class="file-pill" id="file-pill">
+                  <span class="file-name" id="file-name"></span>
+                  <span class="file-size" id="file-size"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="formats">PNG · JPG · WEBP · PDF · MP3 · WAV · MP4 e mais</div>
         </div>
-        <div>
-          <label for="format">Converter para</label>
-          <select id="format" name="to" disabled><option>Escolha um arquivo primeiro</option></select>
-        </div>
-        <button class="convert" id="convert-button" type="submit" disabled>Converter arquivo</button>
-      </form>
+
+        <form class="settings" id="convert-form">
+          <div>
+            <h2>Destino</h2>
+            <p class="settings-note">Escolha o formato final.</p>
+
+            <div class="settings-divider"></div>
+
+            <label for="format">Converter para</label>
+
+            <div class="select-wrap">
+              <select id="format" name="to" disabled>
+                <option value="">Escolha um arquivo primeiro</option>
+              </select>
+              <span class="select-arrow" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <button class="convert" id="convert-button" type="submit" disabled>
+            Converter arquivo
+          </button>
+        </form>
+      </section>
     </section>
 
     <section class="activity" aria-live="polite">
-      <div class="activity-head"><h2>Atividade recente</h2><span class="activity-count" id="activity-count">nenhum job ainda</span></div>
-      <div id="jobs"><div class="empty">As conversoes desta sessão aparecem aqui.</div></div>
+      <div class="activity-head">
+        <h2>Atividade recente</h2>
+        <span class="activity-count" id="activity-count">Nenhuma conversão ainda</span>
+      </div>
+
+      <div id="jobs">
+        <div class="empty">
+          Assim que você converter um arquivo, ele aparecerá aqui.
+        </div>
+      </div>
     </section>
   </main>
 
@@ -156,81 +1135,267 @@
     const pill = document.querySelector('#file-pill');
     const fileName = document.querySelector('#file-name');
     const fileSize = document.querySelector('#file-size');
+    const jobsContainer = document.querySelector('#jobs');
+    const activityCount = document.querySelector('#activity-count');
+
     const jobs = new Map();
 
-    choose.addEventListener('click', () => input.click());
-    input.addEventListener('change', () => setFile(input.files[0]));
-    ['dragenter', 'dragover'].forEach(event => dropzone.addEventListener(event, event => { event.preventDefault(); dropzone.classList.add('is-over'); }));
-    ['dragleave', 'drop'].forEach(event => dropzone.addEventListener(event, event => { event.preventDefault(); dropzone.classList.remove('is-over'); }));
-    dropzone.addEventListener('drop', event => setFile(event.dataTransfer.files[0]));
+    choose.addEventListener('click', event => {
+      event.stopPropagation();
+      input.click();
+    });
+
+    dropzone.addEventListener('click', event => {
+      if (event.target.closest('button')) return;
+      input.click();
+    });
+
+    dropzone.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+
+      event.preventDefault();
+      input.click();
+    });
+
+    input.addEventListener('change', () => {
+      setFile(input.files[0]);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, event => {
+        event.preventDefault();
+        dropzone.classList.add('is-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, event => {
+        event.preventDefault();
+        dropzone.classList.remove('is-over');
+      });
+    });
+
+    dropzone.addEventListener('drop', event => {
+      setFile(event.dataTransfer.files[0]);
+    });
 
     function setFile(file) {
       if (!file) return;
+
       input.files = createFileList(file);
       fileName.textContent = file.name;
       fileSize.textContent = formatBytes(file.size);
       pill.classList.add('visible');
+
       updateTargetOptions(extension(file.name));
-      convert.disabled = false;
+      convert.disabled = format.disabled;
     }
+
     function createFileList(file) {
-      const transfer = new DataTransfer(); transfer.items.add(file); return transfer.files;
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      return transfer.files;
     }
+
     function formatBytes(bytes) {
       if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+
+      if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
+      }
+
       return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     }
-    function extension(name) { return name.split('.').pop().toLowerCase(); }
+
+    function extension(name) {
+      return name.split('.').pop().toLowerCase();
+    }
+
     const targetMatrix = {
-      png: ['jpg', 'webp', 'pdf'], jpg: ['png', 'webp', 'pdf'], jpeg: ['png', 'webp', 'pdf'], webp: ['png', 'jpg', 'pdf'],
-      wav: ['mp3'], mp3: ['wav'], ogg: ['mp3', 'wav'], flac: ['mp3', 'wav'], aac: ['mp3', 'wav'], m4a: ['mp3', 'wav'],
-      mp4: ['mp4', 'mp3', 'wav'], mkv: ['mp4', 'mp3', 'wav'], mov: ['mp4', 'mp3', 'wav'], avi: ['mp4', 'mp3', 'wav'], webm: ['mp4', 'mp3', 'wav'],
+      png: ['jpg', 'webp', 'pdf'],
+      jpg: ['png', 'webp', 'pdf'],
+      jpeg: ['png', 'webp', 'pdf'],
+      webp: ['png', 'jpg', 'pdf'],
+      wav: ['mp3'],
+      mp3: ['wav'],
+      ogg: ['mp3', 'wav'],
+      flac: ['mp3', 'wav'],
+      aac: ['mp3', 'wav'],
+      m4a: ['mp3', 'wav'],
+      mp4: ['mp4', 'mp3', 'wav'],
+      mkv: ['mp4', 'mp3', 'wav'],
+      mov: ['mp4', 'mp3', 'wav'],
+      avi: ['mp4', 'mp3', 'wav'],
+      webm: ['mp4', 'mp3', 'wav'],
       pdf: ['png', 'jpg']
     };
+
     function updateTargetOptions(source) {
       const targets = targetMatrix[source] || [];
+
       format.innerHTML = targets.length
-        ? targets.map(target => `<option value="${target}">${target.toUpperCase()}</option>`).join('')
-        : '<option>Formato não suportado</option>';
+        ? targets
+            .map(target => `<option value="${target}">${target.toUpperCase()}</option>`)
+            .join('')
+        : '<option value="">Formato não suportado</option>';
+
       format.disabled = !targets.length;
       convert.disabled = !targets.length;
     }
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      const file = input.files[0]; if (!file) return;
-      convert.disabled = true; convert.textContent = 'Enviando...';
-      const body = new FormData(); body.append('file', file); body.append('to', format.value);
+
+      const file = input.files[0];
+      if (!file) return;
+
+      convert.disabled = true;
+      convert.textContent = 'Enviando...';
+
+      const body = new FormData();
+      body.append('file', file);
+      body.append('to', format.value);
+
       try {
-        const response = await fetch('/api/upload', { method: 'POST', body });
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body
+        });
+
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Falha no upload');
-        jobs.set(result.job_id, { id: result.job_id, name: result.filename, from: extension(result.filename), to: format.value, status: 'queued', progress: 0 });
-        renderJobs(); poll(result.job_id);
-        input.value = ''; pill.classList.remove('visible'); convert.textContent = 'Converter arquivo'; convert.disabled = true;
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Falha no upload');
+        }
+
+        jobs.set(result.job_id, {
+          id: result.job_id,
+          name: result.filename,
+          from: extension(result.filename),
+          to: format.value,
+          status: 'queued',
+          progress: 0
+        });
+
+        renderJobs();
+        poll(result.job_id);
+
+        input.value = '';
+        pill.classList.remove('visible');
+
+        convert.textContent = 'Converter arquivo';
+        convert.disabled = true;
       } catch (error) {
-        convert.textContent = error.message; setTimeout(() => { convert.textContent = 'Converter arquivo'; convert.disabled = false; }, 2500);
+        convert.textContent = error.message;
+
+        setTimeout(() => {
+          convert.textContent = 'Converter arquivo';
+          convert.disabled = false;
+        }, 2500);
       }
     });
 
     async function poll(id) {
-      const job = jobs.get(id); if (!job) return;
+      const job = jobs.get(id);
+      if (!job) return;
+
       try {
-        const response = await fetch(`/api/jobs/${id}/status`); const status = await response.json();
-        Object.assign(job, { status: status.status, progress: status.progress, error: status.error }); renderJobs();
-        if (status.status === 'completed' || status.status === 'failed') return;
+        const response = await fetch(`/api/jobs/${id}/status`);
+        const status = await response.json();
+
+        Object.assign(job, {
+          status: status.status,
+          progress: status.progress,
+          error: status.error
+        });
+
+        renderJobs();
+
+        if (status.status === 'completed' || status.status === 'failed') {
+          return;
+        }
+
         setTimeout(() => poll(id), 700);
-      } catch (_) { setTimeout(() => poll(id), 1500); }
+      } catch (_) {
+        setTimeout(() => poll(id), 1500);
+      }
     }
+
     function renderJobs() {
-      const container = document.querySelector('#jobs'); const list = [...jobs.values()].reverse();
-      document.querySelector('#activity-count').textContent = list.length === 1 ? '1 job' : `${list.length} jobs`;
-      if (!list.length) { container.innerHTML = '<div class="empty">As conversoes desta sessao aparecem aqui.</div>'; return; }
-      container.innerHTML = list.map(job => `<article class="job"><div><div class="job-file">${escapeHtml(job.name)}</div><div class="job-route">${escapeHtml(job.from.toUpperCase())} → ${escapeHtml(job.to.toUpperCase())}${job.error ? ` · ${escapeHtml(job.error)}` : ''}</div></div><div><div class="job-state ${job.status}">${label(job.status)}</div><div class="job-progress"><span style="width:${job.progress}%"></span></div></div>${job.status === 'completed' ? `<a class="download" href="/api/jobs/${job.id}/download">Baixar</a>` : '<span></span>'}</article>`).join('');
+      const list = [...jobs.values()].reverse();
+
+      activityCount.textContent =
+        list.length === 1 ? '1 job' : `${list.length} jobs`;
+
+      if (!list.length) {
+        jobsContainer.innerHTML = `
+          <div class="empty">
+            Assim que você converter um arquivo, ele aparecerá aqui.
+          </div>
+        `;
+        return;
+      }
+
+      jobsContainer.innerHTML = list.map(job => `
+        <article class="job">
+          <div>
+            <div class="job-file">${escapeHtml(job.name)}</div>
+            <div class="job-route">
+              ${escapeHtml(job.from.toUpperCase())}
+              →
+              ${escapeHtml(job.to.toUpperCase())}
+              ${job.error ? ` · ${escapeHtml(job.error)}` : ''}
+            </div>
+          </div>
+
+          <div>
+            <div class="job-state ${job.status}">
+              ${label(job.status)}
+            </div>
+
+            <div class="job-progress">
+              <span style="width:${job.progress}%"></span>
+            </div>
+          </div>
+
+          ${
+            job.status === 'completed'
+              ? `
+                <a
+                  class="download"
+                  href="/api/jobs/${job.id}/download"
+                >
+                  Baixar
+                </a>
+              `
+              : '<span></span>'
+          }
+        </article>
+      `).join('');
     }
-    function label(status) { return ({ queued: 'na fila', processing: 'convertendo', completed: 'pronto', failed: 'falhou' })[status] || status; }
-    function escapeHtml(value) { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
+
+    function label(status) {
+      return {
+        queued: 'Na fila',
+        processing: 'Convertendo',
+        completed: 'Pronto',
+        failed: 'Falhou'
+      }[status] || status;
+    }
+
+    function escapeHtml(value) {
+      return value.replace(
+        /[&<>'"]/g,
+        char => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#39;',
+          '"': '&quot;'
+        })[char]
+      );
+    }
+
     renderJobs();
   </script>
 </body>

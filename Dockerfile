@@ -26,6 +26,10 @@ ENV HOST=0.0.0.0 \
     MAX_UPLOAD_SIZE=2147483648
 
 RUN mkdir -p /data
+
+WORKDIR /app
+
+COPY --from=builder /app/web ./web
 VOLUME ["/data"]
 EXPOSE 8080
 
