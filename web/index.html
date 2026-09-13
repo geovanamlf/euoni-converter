@@ -1006,6 +1006,24 @@
         animation-duration: .01ms !important;
       }
     }
+
+    @media (min-width: 1101px) {
+      .character-stage {
+        width: 700px;
+        height: 800px;
+        right: -400px;
+        top: -30px;
+      }
+
+      .character-stage::before {
+        top: 95px;
+        right: 120px;
+        width: 480px;
+        height: 480px;
+        opacity: 1;
+      }
+    }
+
   </style>
 </head>
 
@@ -1040,7 +1058,7 @@
           Transforme seus arquivos de forma simples,<br class="desktop-break">
           rápida e sem complicação.
         </p>
-      </div>
+      </div>  
 
       <div class="character-stage" aria-hidden="true">
         <img
