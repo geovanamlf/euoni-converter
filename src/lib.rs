@@ -1,5 +1,6 @@
 pub mod app;
 pub mod config;
+pub mod documents;
 pub mod error;
 pub mod ffmpeg;
 pub mod jobs;

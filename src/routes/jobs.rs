@@ -6,6 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::storage::Storage;
 use crate::{app::AppState, jobs::Job};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -37,8 +38,28 @@ pub async fn create_job_handler(
     State(state): State<AppState>,
     Json(request): Json<CreateJobRequest>,
 ) -> Result<(StatusCode, Json<CreateJobResponse>), (StatusCode, Json<serde_json::Value>)> {
+    let input_name = Storage::ensure_safe_filename(&request.input_name).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "unsafe input filename" })),
+        )
+    })?;
+    let from = request.from.trim().to_ascii_lowercase();
+    let to = request.to.trim().to_ascii_lowercase();
+    if !crate::worker::is_supported_conversion(&from, &to)
+        || std::path::Path::new(&input_name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase() != from)
+            .unwrap_or(true)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "unsupported conversion" })),
+        ));
+    }
     let store = state.jobs.clone();
-    let job = store.create_job(&request.input_name, &request.from, &request.to);
+    let job = store.create_job(&input_name, &from, &to);
 
     if state.queue.enqueue(job.id.clone()).await.is_err() {
         state.jobs.set_error(&job.id, "failed to enqueue job");

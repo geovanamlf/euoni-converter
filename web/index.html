@@ -1105,7 +1105,7 @@
             </div>
           </div>
 
-          <div class="formats">PNG · JPG · WEBP · PDF · MP3 · WAV · MP4 e mais</div>
+          <div class="formats">PNG · JPG · WEBP · BMP · TIFF · GIF · SVG · ICO · HEIC · AVIF · PDF · MP3 · WAV · MP4 e mais</div>
         </div>
 
         <form class="settings" id="convert-form">
@@ -1237,6 +1237,13 @@
       jpg: ['png', 'webp', 'pdf'],
       jpeg: ['png', 'webp', 'pdf'],
       webp: ['png', 'jpg', 'pdf'],
+      bmp: ['jpg', 'png', 'webp', 'pdf'],
+      tiff: ['jpg', 'png', 'webp', 'pdf'],
+      gif: ['jpg', 'png', 'webp', 'pdf'],
+      svg: ['png', 'jpg', 'webp', 'pdf'],
+      ico: ['png', 'jpg'],
+      heic: ['jpg', 'png', 'webp', 'pdf'],
+      avif: ['jpg', 'png', 'webp', 'pdf'],
       wav: ['mp3'],
       mp3: ['wav'],
       ogg: ['mp3', 'wav'],
@@ -1248,7 +1255,12 @@
       mov: ['mp4', 'mp3', 'wav'],
       avi: ['mp4', 'mp3', 'wav'],
       webm: ['mp4', 'mp3', 'wav'],
-      pdf: ['png', 'jpg']
+      pdf: ['png', 'jpg', 'docx', 'txt', 'html', 'odt', 'rtf'],
+      docx: ['pdf'],
+      txt: ['pdf'],
+      html: ['pdf'],
+      odt: ['pdf'],
+      rtf: ['pdf']
     };
 
     function updateTargetOptions(source) {

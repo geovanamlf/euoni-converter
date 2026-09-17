@@ -47,6 +47,11 @@ pub async fn download_handler(
         Some("wav") => "audio/wav",
         Some("mp4") => "video/mp4",
         Some("pdf") => "application/pdf",
+        Some("docx") => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        Some("txt") => "text/plain; charset=utf-8",
+        Some("html") => "text/html; charset=utf-8",
+        Some("odt") => "application/vnd.oasis.opendocument.text",
+        Some("rtf") => "application/rtf",
         _ => "application/octet-stream",
     };
 

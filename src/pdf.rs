@@ -52,12 +52,14 @@ impl PdfRunner {
 #[derive(Debug, Clone, Default)]
 pub struct ImageToPdfRunner {
     binary: PathBuf,
+    pdf_binary: PathBuf,
 }
 
 impl ImageToPdfRunner {
     pub fn new(binary: impl Into<PathBuf>) -> Self {
         Self {
             binary: binary.into(),
+            pdf_binary: PathBuf::from("img2pdf"),
         }
     }
 
@@ -69,9 +71,61 @@ impl ImageToPdfRunner {
     }
 
     pub fn run(&self, input: &Path, output: &Path) -> Result<(), String> {
-        let args = Self::build_args(input, output);
+        let temp_dir = output
+            .parent()
+            .ok_or_else(|| "PDF output has no parent directory".to_string())?
+            .join(format!(".image-conversion-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).map_err(|err| err.to_string())?;
+        let normalized = temp_dir.join("normalized.png");
+        let image_result = Command::new(&self.binary)
+            .args([
+                input.to_string_lossy().as_ref(),
+                normalized.to_string_lossy().as_ref(),
+            ])
+            .output()
+            .map_err(|err| format!("failed to start ImageMagick: {err}"))?;
+
+        if !image_result.status.success() || !normalized.exists() {
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            return Err(format!(
+                "ImageMagick failed: {}",
+                String::from_utf8_lossy(&image_result.stderr).trim()
+            ));
+        }
+
+        let pdf_result = Command::new(&self.pdf_binary)
+            .arg(&normalized)
+            .arg("-o")
+            .arg(output)
+            .output();
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        match pdf_result {
+            Ok(result) if result.status.success() && output.exists() => Ok(()),
+            Err(_) => {
+                let fallback = Command::new(&self.binary)
+                    .arg(input)
+                    .arg(output)
+                    .output()
+                    .map_err(|err| format!("failed to start PDF converter: {err}"))?;
+                if fallback.status.success() && output.exists() {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "PDF conversion failed: {}",
+                        String::from_utf8_lossy(&fallback.stderr).trim()
+                    ))
+                }
+            }
+            Ok(result) => Err(format!(
+                "img2pdf failed: {}",
+                String::from_utf8_lossy(&result.stderr).trim()
+            )),
+        }
+    }
+
+    pub fn run_image(&self, input: &Path, output: &Path) -> Result<(), String> {
         let result = Command::new(&self.binary)
-            .args(&args)
+            .args(Self::build_args(input, output))
             .output()
             .map_err(|err| format!("failed to start ImageMagick: {err}"))?;
 

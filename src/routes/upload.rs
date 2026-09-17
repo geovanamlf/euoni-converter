@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::{app::AppState, storage::Storage, upload::save_uploaded_file};
+use crate::{app::AppState, storage::Storage, upload::save_multipart_file};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UploadResponse {
@@ -18,10 +18,19 @@ pub async fn upload_handler(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<UploadResponse>), (StatusCode, Json<serde_json::Value>)> {
-    let mut file_bytes = Vec::new();
     let mut filename = String::new();
     let mut target_format = None;
     let mut found_file = false;
+    let mut size_bytes = 0;
+    let storage = Storage::new(&state.settings.data_dir).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": "storage unavailable" })),
+        )
+    })?;
+    let temp_path = storage
+        .temp
+        .join(format!("upload-{}", uuid::Uuid::new_v4()));
 
     while let Some(field) = multipart.next_field().await.map_err(|_| {
         (
@@ -35,13 +44,21 @@ pub async fn upload_handler(
         if name == "file" && !file_name.is_empty() {
             filename = file_name;
             found_file = true;
-            let data = field.bytes().await.map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(serde_json::json!({ "error": "unable to read uploaded file" })),
-                )
-            })?;
-            file_bytes.extend_from_slice(&data);
+            let uploaded =
+                save_multipart_file(field, &temp_path, &filename, state.settings.max_upload_size)
+                    .await
+                    .map_err(|err| {
+                        let _ = std::fs::remove_file(&temp_path);
+                        (
+                            if err == "file too large" {
+                                StatusCode::PAYLOAD_TOO_LARGE
+                            } else {
+                                StatusCode::BAD_REQUEST
+                            },
+                            Json(serde_json::json!({ "error": err })),
+                        )
+                    })?;
+            size_bytes = uploaded.size_bytes;
         } else if name == "to" {
             target_format = Some(field.text().await.map_err(|_| {
                 (
@@ -53,6 +70,7 @@ pub async fn upload_handler(
     }
 
     if !found_file || filename.is_empty() {
+        let _ = std::fs::remove_file(&temp_path);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": "no file uploaded" })),
@@ -60,6 +78,7 @@ pub async fn upload_handler(
     }
 
     let safe_name = Storage::ensure_safe_filename(&filename).map_err(|_| {
+        let _ = std::fs::remove_file(&temp_path);
         (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": "unsafe filename" })),
@@ -71,6 +90,7 @@ pub async fn upload_handler(
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase)
         .ok_or_else(|| {
+            let _ = std::fs::remove_file(&temp_path);
             (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({ "error": "file extension is required" })),
@@ -82,6 +102,7 @@ pub async fn upload_handler(
         .to_ascii_lowercase();
 
     if target_format.is_empty() || target_format.contains('.') || target_format.contains('/') {
+        let _ = std::fs::remove_file(&temp_path);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": "invalid target format" })),
@@ -89,6 +110,7 @@ pub async fn upload_handler(
     }
 
     if !crate::worker::is_supported_conversion(&source_format, &target_format) {
+        let _ = std::fs::remove_file(&temp_path);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
@@ -97,24 +119,11 @@ pub async fn upload_handler(
         ));
     }
 
-    if file_bytes.len() as u64 > state.settings.max_upload_size {
-        return Err((
-            StatusCode::PAYLOAD_TOO_LARGE,
-            Json(serde_json::json!({ "error": "file too large" })),
-        ));
-    }
-
-    let storage = Storage::new(&state.settings.data_dir).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": "storage unavailable" })),
-        )
-    })?;
-
     let job = state
         .jobs
         .create_job(&safe_name, &source_format, &target_format);
     let job_dir = storage.create_job_dir(&job.id).map_err(|_| {
+        let _ = std::fs::remove_file(&temp_path);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": "failed to create job directory" })),
@@ -122,16 +131,11 @@ pub async fn upload_handler(
     })?;
 
     let saved_path = job_dir.join(&safe_name);
-    let uploaded = save_uploaded_file(
-        &file_bytes,
-        &saved_path,
-        &safe_name,
-        state.settings.max_upload_size,
-    )
-    .map_err(|err| {
+    std::fs::rename(&temp_path, &saved_path).map_err(|err| {
+        let _ = std::fs::remove_file(&temp_path);
         (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": err })),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("failed to store upload: {err}") })),
         )
     })?;
 
@@ -147,8 +151,8 @@ pub async fn upload_handler(
         StatusCode::OK,
         Json(UploadResponse {
             job_id: job.id,
-            filename: uploaded.safe_name,
-            size_bytes: uploaded.size_bytes,
+            filename: safe_name,
+            size_bytes,
         }),
     ))
 }

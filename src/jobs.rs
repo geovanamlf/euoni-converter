@@ -192,20 +192,30 @@ impl JobStore {
     }
 
     pub fn remove_expired(&self, now: u64, retention_seconds: u64) -> Vec<String> {
+        let ids = self.expired_job_ids(now, retention_seconds);
+        for id in &ids {
+            self.delete(id);
+        }
+        ids
+    }
+
+    pub fn expired_job_ids(&self, now: u64, retention_seconds: u64) -> Vec<String> {
         let cutoff = now.saturating_sub(retention_seconds);
         let connection = self.connection.lock().expect("job database lock poisoned");
         let mut statement = connection.prepare("SELECT id FROM jobs WHERE created_at <= ?1 AND status IN ('completed', 'failed', 'cancelled')").expect("failed to prepare expired query");
-        let ids: Vec<String> = statement
+        statement
             .query_map(params![cutoff], |row| row.get(0))
             .expect("failed to find expired jobs")
             .map(|id| id.expect("failed to decode expired id"))
-            .collect();
-        for id in &ids {
-            connection
-                .execute("DELETE FROM jobs WHERE id = ?1", params![id])
-                .expect("failed to delete expired job");
-        }
-        ids
+            .collect()
+    }
+
+    pub fn delete(&self, id: &str) {
+        self.connection
+            .lock()
+            .expect("job database lock poisoned")
+            .execute("DELETE FROM jobs WHERE id = ?1", params![id])
+            .expect("failed to delete job");
     }
 }
 

@@ -81,9 +81,10 @@ cargo test
 
 ## Supported conversions
 
-- Images: PNG, JPG, JPEG and WEBP between the supported image formats and PDF.
+- Images: PNG, JPG, JPEG, WEBP, BMP, TIFF, GIF, SVG, ICO, HEIC and AVIF between the supported image formats and PDF.
 - Audio: WAV, MP3, OGG, FLAC, AAC and M4A to MP3 or WAV.
 - Video: MP4, MKV, MOV, AVI and WEBM to MP4, MP3 or WAV.
 - PDF: PDF to PNG/JPG and images to PDF.
+- Documents: PDF to DOCX, TXT, HTML, ODT and RTF; DOCX, TXT, HTML, ODT and RTF to PDF. Office conversions require LibreOffice and PDF text/HTML extraction uses Poppler. Complex PDF layouts may not be preserved.
 
 The web interface only displays valid output formats for the selected input.

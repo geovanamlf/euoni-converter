@@ -10,6 +10,7 @@ pub enum ConversionKind {
     Audio(AudioConversion),
     Video(VideoConversion),
     Pdf(PdfConversion),
+    Document(DocumentConversion),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +21,26 @@ pub enum ImageConversion {
     WebpToPng,
     PngToWebp,
     JpgToWebp,
+    BmpToJpg,
+    BmpToPng,
+    BmpToWebp,
+    TiffToJpg,
+    TiffToPng,
+    TiffToWebp,
+    GifToJpg,
+    GifToPng,
+    GifToWebp,
+    SvgToPng,
+    SvgToJpg,
+    SvgToWebp,
+    IcoToPng,
+    IcoToJpg,
+    HeicToJpg,
+    HeicToPng,
+    HeicToWebp,
+    AvifToJpg,
+    AvifToPng,
+    AvifToWebp,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +71,16 @@ pub enum PdfConversion {
     PngToPdf,
     JpgToPdf,
     WebpToPdf,
+    BmpToPdf,
+    TiffToPdf,
+    GifToPdf,
+    SvgToPdf,
+    HeicToPdf,
+    AvifToPdf,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentConversion;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobPlan {
@@ -66,6 +96,26 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
         ("webp", "png") => Ok(ConversionKind::Image(ImageConversion::WebpToPng)),
         ("png", "webp") => Ok(ConversionKind::Image(ImageConversion::PngToWebp)),
         ("jpg" | "jpeg", "webp") => Ok(ConversionKind::Image(ImageConversion::JpgToWebp)),
+        ("bmp", "jpg") => Ok(ConversionKind::Image(ImageConversion::BmpToJpg)),
+        ("bmp", "png") => Ok(ConversionKind::Image(ImageConversion::BmpToPng)),
+        ("bmp", "webp") => Ok(ConversionKind::Image(ImageConversion::BmpToWebp)),
+        ("tiff", "jpg") => Ok(ConversionKind::Image(ImageConversion::TiffToJpg)),
+        ("tiff", "png") => Ok(ConversionKind::Image(ImageConversion::TiffToPng)),
+        ("tiff", "webp") => Ok(ConversionKind::Image(ImageConversion::TiffToWebp)),
+        ("gif", "jpg") => Ok(ConversionKind::Image(ImageConversion::GifToJpg)),
+        ("gif", "png") => Ok(ConversionKind::Image(ImageConversion::GifToPng)),
+        ("gif", "webp") => Ok(ConversionKind::Image(ImageConversion::GifToWebp)),
+        ("svg", "png") => Ok(ConversionKind::Image(ImageConversion::SvgToPng)),
+        ("svg", "jpg") => Ok(ConversionKind::Image(ImageConversion::SvgToJpg)),
+        ("svg", "webp") => Ok(ConversionKind::Image(ImageConversion::SvgToWebp)),
+        ("ico", "png") => Ok(ConversionKind::Image(ImageConversion::IcoToPng)),
+        ("ico", "jpg") => Ok(ConversionKind::Image(ImageConversion::IcoToJpg)),
+        ("heic", "jpg") => Ok(ConversionKind::Image(ImageConversion::HeicToJpg)),
+        ("heic", "png") => Ok(ConversionKind::Image(ImageConversion::HeicToPng)),
+        ("heic", "webp") => Ok(ConversionKind::Image(ImageConversion::HeicToWebp)),
+        ("avif", "jpg") => Ok(ConversionKind::Image(ImageConversion::AvifToJpg)),
+        ("avif", "png") => Ok(ConversionKind::Image(ImageConversion::AvifToPng)),
+        ("avif", "webp") => Ok(ConversionKind::Image(ImageConversion::AvifToWebp)),
         ("wav", "mp3") => Ok(ConversionKind::Audio(AudioConversion::WavToMp3)),
         ("mp3", "wav") => Ok(ConversionKind::Audio(AudioConversion::Mp3ToWav)),
         ("ogg" | "flac" | "aac" | "m4a", "mp3") => {
@@ -90,6 +140,16 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
         ("png", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::PngToPdf)),
         ("jpg" | "jpeg", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::JpgToPdf)),
         ("webp", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::WebpToPdf)),
+        ("bmp", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::BmpToPdf)),
+        ("tiff", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::TiffToPdf)),
+        ("gif", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::GifToPdf)),
+        ("svg", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::SvgToPdf)),
+        ("heic", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::HeicToPdf)),
+        ("avif", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::AvifToPdf)),
+        ("pdf", "docx" | "txt" | "html" | "odt" | "rtf")
+        | ("docx" | "txt" | "html" | "odt" | "rtf", "pdf") => {
+            Ok(ConversionKind::Document(DocumentConversion))
+        }
         _ => Err("unsupported conversion".to_string()),
     }
 }
@@ -112,6 +172,18 @@ pub fn execute_image_conversion(
     output_path: &Path,
     conversion: &ImageConversion,
 ) -> Result<(), String> {
+    if !matches!(
+        conversion,
+        ImageConversion::PngToJpg
+            | ImageConversion::WebpToJpg
+            | ImageConversion::JpgToPng
+            | ImageConversion::WebpToPng
+            | ImageConversion::PngToWebp
+            | ImageConversion::JpgToWebp
+    ) {
+        return crate::pdf::ImageToPdfRunner::system().run_image(input_path, output_path);
+    }
+
     let img =
         image::open(input_path).map_err(|err| format!("failed to open input image: {err}"))?;
 
@@ -137,8 +209,10 @@ pub fn execute_image_conversion(
                         .save(output_path)
                         .map_err(|err| format!("failed to write output image: {err}"))?;
                 }
+                _ => unreachable!("ImageMagick conversions return before decoding"),
             }
         }
+        _ => unreachable!("ImageMagick conversions return before decoding"),
     }
 
     Ok(())
@@ -213,7 +287,15 @@ pub fn execute_pdf_conversion(
         PdfConversion::PdfToPng | PdfConversion::PdfToJpg => {
             crate::pdf::PdfRunner::system().run(input_path, output_path)
         }
-        PdfConversion::PngToPdf | PdfConversion::JpgToPdf | PdfConversion::WebpToPdf => {
+        PdfConversion::PngToPdf
+        | PdfConversion::JpgToPdf
+        | PdfConversion::WebpToPdf
+        | PdfConversion::BmpToPdf
+        | PdfConversion::TiffToPdf
+        | PdfConversion::GifToPdf
+        | PdfConversion::SvgToPdf
+        | PdfConversion::HeicToPdf
+        | PdfConversion::AvifToPdf => {
             crate::pdf::ImageToPdfRunner::system().run(input_path, output_path)
         }
     }
@@ -234,6 +316,9 @@ pub fn execute_job(job: &Job, input_path: &Path, output_path: &Path) -> Result<(
         }
         ConversionKind::Pdf(ref conversion) => {
             execute_pdf_conversion(input_path, output_path, conversion)
+        }
+        ConversionKind::Document(_) => {
+            crate::documents::DocumentRunner::system().run(input_path, output_path)
         }
     }
 }
@@ -342,25 +427,103 @@ mod tests {
 
     #[test]
     fn supports_the_declared_conversion_matrix() {
-        for (source, target) in [
+        let image_conversions = [
             ("png", "jpg"),
-            ("webp", "jpg"),
-            ("jpeg", "png"),
             ("png", "webp"),
-            ("flac", "mp3"),
-            ("m4a", "wav"),
-            ("mkv", "mp4"),
-            ("webm", "mp3"),
-            ("pdf", "jpg"),
             ("png", "pdf"),
-        ] {
+            ("jpg", "png"),
+            ("jpg", "webp"),
+            ("jpg", "pdf"),
+            ("jpeg", "png"),
+            ("jpeg", "webp"),
+            ("jpeg", "pdf"),
+            ("webp", "jpg"),
+            ("webp", "png"),
+            ("webp", "pdf"),
+            ("bmp", "jpg"),
+            ("bmp", "png"),
+            ("bmp", "webp"),
+            ("bmp", "pdf"),
+            ("tiff", "jpg"),
+            ("tiff", "png"),
+            ("tiff", "webp"),
+            ("tiff", "pdf"),
+            ("gif", "jpg"),
+            ("gif", "png"),
+            ("gif", "webp"),
+            ("gif", "pdf"),
+            ("svg", "png"),
+            ("svg", "jpg"),
+            ("svg", "webp"),
+            ("svg", "pdf"),
+            ("ico", "png"),
+            ("ico", "jpg"),
+            ("heic", "jpg"),
+            ("heic", "png"),
+            ("heic", "webp"),
+            ("heic", "pdf"),
+            ("avif", "jpg"),
+            ("avif", "png"),
+            ("avif", "webp"),
+            ("avif", "pdf"),
+            ("pdf", "png"),
+            ("pdf", "jpg"),
+        ];
+        let audio_conversions = [
+            ("wav", "mp3"),
+            ("mp3", "wav"),
+            ("ogg", "mp3"),
+            ("ogg", "wav"),
+            ("flac", "mp3"),
+            ("flac", "wav"),
+            ("aac", "mp3"),
+            ("aac", "wav"),
+            ("m4a", "mp3"),
+            ("m4a", "wav"),
+        ];
+        let video_conversions = [
+            ("mp4", "mp4"),
+            ("mp4", "mp3"),
+            ("mp4", "wav"),
+            ("mkv", "mp4"),
+            ("mkv", "mp3"),
+            ("mkv", "wav"),
+            ("mov", "mp4"),
+            ("mov", "mp3"),
+            ("mov", "wav"),
+            ("avi", "mp4"),
+            ("avi", "mp3"),
+            ("avi", "wav"),
+            ("webm", "mp4"),
+            ("webm", "mp3"),
+            ("webm", "wav"),
+        ];
+        let document_conversions = [
+            ("pdf", "docx"),
+            ("pdf", "txt"),
+            ("pdf", "html"),
+            ("pdf", "odt"),
+            ("pdf", "rtf"),
+            ("docx", "pdf"),
+            ("txt", "pdf"),
+            ("html", "pdf"),
+            ("odt", "pdf"),
+            ("rtf", "pdf"),
+        ];
+
+        for (source, target) in image_conversions
+            .into_iter()
+            .chain(audio_conversions)
+            .chain(video_conversions)
+            .chain(document_conversions)
+        {
             assert!(
                 is_supported_conversion(source, target),
                 "{source} -> {target}"
             );
         }
 
-        for (source, target) in [("gif", "jpg"), ("pdf", "mp4"), ("mp3", "pdf")] {
+        for (source, target) in [("txt", "jpg"), ("pdf", "mp4"), ("mp3", "pdf")] {
             assert!(
                 !is_supported_conversion(source, target),
                 "{source} -> {target}"

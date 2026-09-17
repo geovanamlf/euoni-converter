@@ -4,8 +4,8 @@ use axum::{
     routing::{get, post},
 };
 
-use tower_http::services::ServeDir;
 use tokio::sync::mpsc;
+use tower_http::services::ServeDir;
 
 use crate::{
     config::Settings,
@@ -66,13 +66,16 @@ pub fn create_app(settings: Settings) -> Router {
                 .settings
                 .job_retention_hours
                 .saturating_mul(3600);
-            let expired_ids = cleanup_state.jobs.remove_expired(now, retention_seconds);
+            let expired_ids = cleanup_state.jobs.expired_job_ids(now, retention_seconds);
             for job_id in expired_ids {
                 let path = std::path::Path::new(&cleanup_state.settings.data_dir)
                     .join("jobs")
                     .join(&job_id);
-                if let Err(err) = tokio::fs::remove_dir_all(path).await {
-                    tracing::warn!(job_id = %job_id, error = %err, "failed to remove expired job files");
+                match tokio::fs::remove_dir_all(path).await {
+                    Ok(()) => cleanup_state.jobs.delete(&job_id),
+                    Err(err) => {
+                        tracing::warn!(job_id = %job_id, error = %err, "failed to remove expired job files");
+                    }
                 }
             }
         }
@@ -135,7 +138,7 @@ mod tests {
             .await
             .unwrap();
         let html = String::from_utf8(body.to_vec()).unwrap();
-        assert!(html.contains("Euoni Converter"));
+        assert!(html.contains("Euoni / Conversor"));
         assert!(html.contains("/api/upload"));
     }
 
