@@ -4,9 +4,24 @@ use tokio::sync::mpsc;
 
 use crate::{app::AppState, jobs::Job, jobs::JobStatus};
 
+/// Every format that can participate in a declared conversion.  This list is
+/// also used to enumerate the production conversion matrix for tests and UIs.
+const CONVERSION_FORMATS: &[&str] = &[
+    "png", "jpg", "jpeg", "webp", "bmp", "tiff", "gif", "svg", "ico", "heic", "avif", "pdf",
+    "docx", "txt", "html", "odt", "rtf", "wav", "mp3", "ogg", "flac", "aac", "m4a", "mp4", "mkv",
+    "mov", "avi", "webm",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SupportedConversion {
+    pub from: &'static str,
+    pub to: &'static str,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversionKind {
     Image(ImageConversion),
+    Heic,
     Audio(AudioConversion),
     Video(VideoConversion),
     Pdf(PdfConversion),
@@ -41,6 +56,8 @@ pub enum ImageConversion {
     AvifToJpg,
     AvifToPng,
     AvifToWebp,
+    /// Formats handled by ImageMagick rather than the in-process image codec.
+    ImageMagick,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +94,7 @@ pub enum PdfConversion {
     SvgToPdf,
     HeicToPdf,
     AvifToPdf,
+    IcoToPdf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +134,21 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
         ("avif", "jpg") => Ok(ConversionKind::Image(ImageConversion::AvifToJpg)),
         ("avif", "png") => Ok(ConversionKind::Image(ImageConversion::AvifToPng)),
         ("avif", "webp") => Ok(ConversionKind::Image(ImageConversion::AvifToWebp)),
+        // Additional raster/vector combinations supported by ImageMagick.
+        ("bmp", "tiff" | "gif" | "ico" | "avif")
+        | ("tiff", "bmp" | "gif" | "ico" | "avif")
+        | ("gif", "bmp" | "tiff" | "ico" | "avif")
+        | ("svg", "bmp" | "tiff" | "gif" | "ico" | "avif")
+        | ("ico", "webp" | "bmp" | "tiff" | "gif" | "avif")
+        | ("heic", "bmp" | "tiff" | "gif" | "ico" | "avif")
+        | ("avif", "bmp" | "tiff" | "gif" | "ico")
+        | ("png", "avif")
+        | ("jpg" | "jpeg", "avif")
+        | ("webp", "avif") => Ok(ConversionKind::Image(ImageConversion::ImageMagick)),
+        (
+            "bmp" | "tiff" | "gif" | "svg" | "ico" | "avif" | "png" | "jpg" | "jpeg" | "webp",
+            "heic",
+        ) => Ok(ConversionKind::Heic),
         ("wav", "mp3") => Ok(ConversionKind::Audio(AudioConversion::WavToMp3)),
         ("mp3", "wav") => Ok(ConversionKind::Audio(AudioConversion::Mp3ToWav)),
         ("ogg" | "flac" | "aac" | "m4a", "mp3") => {
@@ -146,6 +179,7 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
         ("svg", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::SvgToPdf)),
         ("heic", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::HeicToPdf)),
         ("avif", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::AvifToPdf)),
+        ("ico", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::IcoToPdf)),
         ("pdf", "docx" | "txt" | "html" | "odt" | "rtf")
         | ("docx" | "txt" | "html" | "odt" | "rtf", "pdf") => {
             Ok(ConversionKind::Document(DocumentConversion))
@@ -156,6 +190,22 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
 
 pub fn is_supported_conversion(from: &str, to: &str) -> bool {
     conversion_for_formats(from, to).is_ok()
+}
+
+/// Returns the complete matrix accepted by the same resolver used at runtime.
+/// Adding a supported pair to `conversion_for_formats` therefore makes it
+/// discoverable by the matrix suite automatically.
+pub fn supported_conversions() -> Vec<SupportedConversion> {
+    let mut conversions = CONVERSION_FORMATS
+        .iter()
+        .flat_map(|from| {
+            CONVERSION_FORMATS.iter().filter_map(move |to| {
+                is_supported_conversion(from, to).then_some(SupportedConversion { from, to })
+            })
+        })
+        .collect::<Vec<_>>();
+    conversions.sort_unstable();
+    conversions
 }
 
 pub fn plan_conversion(job: &Job) -> Result<JobPlan, String> {
@@ -295,7 +345,8 @@ pub fn execute_pdf_conversion(
         | PdfConversion::GifToPdf
         | PdfConversion::SvgToPdf
         | PdfConversion::HeicToPdf
-        | PdfConversion::AvifToPdf => {
+        | PdfConversion::AvifToPdf
+        | PdfConversion::IcoToPdf => {
             crate::pdf::ImageToPdfRunner::system().run(input_path, output_path)
         }
     }
@@ -308,6 +359,7 @@ pub fn execute_job(job: &Job, input_path: &Path, output_path: &Path) -> Result<(
         ConversionKind::Image(ref conversion) => {
             execute_image_conversion(input_path, output_path, conversion)
         }
+        ConversionKind::Heic => crate::heif::HeifRunner::system().run(input_path, output_path),
         ConversionKind::Audio(ref conversion) => {
             execute_audio_conversion(input_path, output_path, conversion)
         }
@@ -376,8 +428,9 @@ pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), St
 #[cfg(test)]
 mod tests {
     use super::{
-        AudioConversion, ConversionKind, ImageConversion, execute_audio_conversion,
-        execute_image_conversion, execute_job, is_supported_conversion, plan_conversion,
+        AudioConversion, ConversionKind, ImageConversion, conversion_for_formats,
+        execute_audio_conversion, execute_image_conversion, execute_job, is_supported_conversion,
+        plan_conversion,
     };
     use crate::jobs::{Job, JobPayload, JobStatus};
     use std::fs;
@@ -431,41 +484,87 @@ mod tests {
             ("png", "jpg"),
             ("png", "webp"),
             ("png", "pdf"),
+            ("png", "avif"),
+            ("png", "heic"),
             ("jpg", "png"),
             ("jpg", "webp"),
             ("jpg", "pdf"),
+            ("jpg", "avif"),
+            ("jpg", "heic"),
             ("jpeg", "png"),
             ("jpeg", "webp"),
             ("jpeg", "pdf"),
+            ("jpeg", "avif"),
+            ("jpeg", "heic"),
             ("webp", "jpg"),
             ("webp", "png"),
             ("webp", "pdf"),
+            ("webp", "avif"),
+            ("webp", "heic"),
             ("bmp", "jpg"),
             ("bmp", "png"),
             ("bmp", "webp"),
             ("bmp", "pdf"),
+            ("bmp", "tiff"),
+            ("bmp", "gif"),
+            ("bmp", "ico"),
+            ("bmp", "heic"),
+            ("bmp", "avif"),
             ("tiff", "jpg"),
             ("tiff", "png"),
             ("tiff", "webp"),
             ("tiff", "pdf"),
+            ("tiff", "bmp"),
+            ("tiff", "gif"),
+            ("tiff", "ico"),
+            ("tiff", "heic"),
+            ("tiff", "avif"),
             ("gif", "jpg"),
             ("gif", "png"),
             ("gif", "webp"),
             ("gif", "pdf"),
+            ("gif", "bmp"),
+            ("gif", "tiff"),
+            ("gif", "ico"),
+            ("gif", "heic"),
+            ("gif", "avif"),
             ("svg", "png"),
             ("svg", "jpg"),
             ("svg", "webp"),
             ("svg", "pdf"),
+            ("svg", "bmp"),
+            ("svg", "tiff"),
+            ("svg", "gif"),
+            ("svg", "ico"),
+            ("svg", "heic"),
+            ("svg", "avif"),
             ("ico", "png"),
             ("ico", "jpg"),
+            ("ico", "webp"),
+            ("ico", "bmp"),
+            ("ico", "tiff"),
+            ("ico", "gif"),
+            ("ico", "pdf"),
+            ("ico", "heic"),
+            ("ico", "avif"),
             ("heic", "jpg"),
             ("heic", "png"),
             ("heic", "webp"),
             ("heic", "pdf"),
+            ("heic", "bmp"),
+            ("heic", "tiff"),
+            ("heic", "gif"),
+            ("heic", "ico"),
+            ("heic", "avif"),
             ("avif", "jpg"),
             ("avif", "png"),
             ("avif", "webp"),
             ("avif", "pdf"),
+            ("avif", "bmp"),
+            ("avif", "tiff"),
+            ("avif", "gif"),
+            ("avif", "ico"),
+            ("avif", "heic"),
             ("pdf", "png"),
             ("pdf", "jpg"),
         ];
@@ -529,6 +628,18 @@ mod tests {
                 "{source} -> {target}"
             );
         }
+    }
+
+    #[test]
+    fn dispatches_modern_image_outputs_to_the_right_runner() {
+        assert_eq!(
+            conversion_for_formats("png", "avif"),
+            Ok(ConversionKind::Image(ImageConversion::ImageMagick))
+        );
+        assert_eq!(
+            conversion_for_formats("png", "heic"),
+            Ok(ConversionKind::Heic)
+        );
     }
 
     #[test]

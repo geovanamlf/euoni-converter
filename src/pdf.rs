@@ -77,9 +77,12 @@ impl ImageToPdfRunner {
             .join(format!(".image-conversion-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).map_err(|err| err.to_string())?;
         let normalized = temp_dir.join("normalized.png");
+        let first_frame = format!("{}[0]", input.to_string_lossy());
         let image_result = Command::new(&self.binary)
             .args([
-                input.to_string_lossy().as_ref(),
+                first_frame.as_str(),
+                "-depth",
+                "8",
                 normalized.to_string_lossy().as_ref(),
             ])
             .output()
@@ -124,8 +127,21 @@ impl ImageToPdfRunner {
     }
 
     pub fn run_image(&self, input: &Path, output: &Path) -> Result<(), String> {
-        let result = Command::new(&self.binary)
-            .args(Self::build_args(input, output))
+        let first_frame = format!("{}[0]", input.to_string_lossy());
+        let mut command = Command::new(&self.binary);
+        command.arg(first_frame);
+
+        if output.extension().and_then(|extension| extension.to_str()) == Some("ico") {
+            command.args([
+                "-resize",
+                "256x256>",
+                "-define",
+                "icon:auto-resize=256,128,64,48,32,16",
+            ]);
+        }
+
+        let result = command
+            .arg(output)
             .output()
             .map_err(|err| format!("failed to start ImageMagick: {err}"))?;
 

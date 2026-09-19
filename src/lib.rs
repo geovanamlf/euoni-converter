@@ -3,6 +3,7 @@ pub mod config;
 pub mod documents;
 pub mod error;
 pub mod ffmpeg;
+pub mod heif;
 pub mod jobs;
 pub mod pdf;
 pub mod routes;

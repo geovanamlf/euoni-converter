@@ -6,7 +6,7 @@ Euoni Converter is a self-hosted local media conversion service built in Rust. I
 
 The easiest way to run the project is with Docker and Docker Compose.
 
-For running without Docker, install Rust, FFmpeg, Poppler (`pdftoppm`) and ImageMagick.
+For running without Docker, install Rust, FFmpeg, Poppler (`pdftoppm`), ImageMagick and libheif's `heif-enc` utility (for HEIC output).
 
 ## Run with Docker
 
