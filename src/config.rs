@@ -6,6 +6,8 @@ pub struct Settings {
     pub host: String,
     pub port: u16,
     pub max_upload_size: u64,
+    pub max_output_size: u64,
+    pub conversion_timeout_seconds: u64,
     pub max_workers: usize,
     pub job_retention_hours: u64,
     pub data_dir: String,
@@ -17,6 +19,8 @@ impl Default for Settings {
             host: default_host(),
             port: default_port(),
             max_upload_size: default_max_upload_size(),
+            max_output_size: default_max_output_size(),
+            conversion_timeout_seconds: default_conversion_timeout_seconds(),
             max_workers: default_max_workers(),
             job_retention_hours: default_job_retention_hours(),
             data_dir: default_data_dir(),
@@ -37,6 +41,16 @@ impl Settings {
             .unwrap_or_else(|_| default_max_upload_size().to_string())
             .parse::<u64>()
             .map_err(|_| AppError::Config("MAX_UPLOAD_SIZE must be a valid u64".to_string()))?;
+        let max_output_size = std::env::var("MAX_OUTPUT_SIZE")
+            .unwrap_or_else(|_| default_max_output_size().to_string())
+            .parse::<u64>()
+            .map_err(|_| AppError::Config("MAX_OUTPUT_SIZE must be a valid u64".to_string()))?;
+        let conversion_timeout_seconds = std::env::var("CONVERSION_TIMEOUT_SECONDS")
+            .unwrap_or_else(|_| default_conversion_timeout_seconds().to_string())
+            .parse::<u64>()
+            .map_err(|_| {
+                AppError::Config("CONVERSION_TIMEOUT_SECONDS must be a valid u64".to_string())
+            })?;
         let max_workers = std::env::var("MAX_WORKERS")
             .unwrap_or_else(|_| default_max_workers().to_string())
             .parse::<usize>()
@@ -51,6 +65,8 @@ impl Settings {
             host,
             port,
             max_upload_size,
+            max_output_size,
+            conversion_timeout_seconds,
             max_workers,
             job_retention_hours,
             data_dir,
@@ -63,7 +79,7 @@ impl Settings {
 }
 
 fn default_host() -> String {
-    "0.0.0.0".to_string()
+    "127.0.0.1".to_string()
 }
 
 fn default_port() -> u16 {
@@ -71,7 +87,15 @@ fn default_port() -> u16 {
 }
 
 fn default_max_upload_size() -> u64 {
-    2 * 1024 * 1024 * 1024
+    512 * 1024 * 1024
+}
+
+fn default_max_output_size() -> u64 {
+    1024 * 1024 * 1024
+}
+
+fn default_conversion_timeout_seconds() -> u64 {
+    300
 }
 
 fn default_max_workers() -> usize {
@@ -94,8 +118,11 @@ mod tests {
     fn settings_defaults_are_reasonable() {
         let settings = Settings::default();
 
-        assert_eq!(settings.host, "0.0.0.0");
+        assert_eq!(settings.host, "127.0.0.1");
         assert_eq!(settings.port, 8080);
+        assert_eq!(settings.max_upload_size, 512 * 1024 * 1024);
+        assert_eq!(settings.max_output_size, 1024 * 1024 * 1024);
+        assert_eq!(settings.conversion_timeout_seconds, 300);
         assert_eq!(settings.max_workers, 2);
         assert_eq!(settings.job_retention_hours, 24);
         assert_eq!(settings.data_dir, "./data");

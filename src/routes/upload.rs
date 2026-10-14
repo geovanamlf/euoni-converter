@@ -5,11 +5,16 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::{app::AppState, storage::Storage, upload::save_multipart_file};
+use crate::{
+    app::AppState,
+    storage::Storage,
+    upload::{save_multipart_file, validate_uploaded_format},
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UploadResponse {
     pub job_id: String,
+    pub token: String,
     pub filename: String,
     pub size_bytes: u64,
 }
@@ -21,6 +26,7 @@ pub async fn upload_handler(
     let mut filename = String::new();
     let mut target_format = None;
     let mut found_file = false;
+    let mut found_target = false;
     let mut size_bytes = 0;
     let storage = Storage::new(&state.settings.data_dir).map_err(|_| {
         (
@@ -41,7 +47,7 @@ pub async fn upload_handler(
         let name = field.name().unwrap_or("file").to_string();
         let file_name = field.file_name().map(str::to_string).unwrap_or_default();
 
-        if name == "file" && !file_name.is_empty() {
+        if name == "file" && !file_name.is_empty() && !found_file {
             filename = file_name;
             found_file = true;
             let uploaded =
@@ -59,13 +65,20 @@ pub async fn upload_handler(
                         )
                     })?;
             size_bytes = uploaded.size_bytes;
-        } else if name == "to" {
+        } else if name == "to" && !found_target {
+            found_target = true;
             target_format = Some(field.text().await.map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     Json(serde_json::json!({ "error": "invalid target format" })),
                 )
             })?);
+        } else {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "unexpected multipart field" })),
+            ));
         }
     }
 
@@ -96,6 +109,13 @@ pub async fn upload_handler(
                 Json(serde_json::json!({ "error": "file extension is required" })),
             )
         })?;
+    if let Err(error) = validate_uploaded_format(&temp_path, &source_format) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ));
+    }
     let target_format = target_format
         .unwrap_or_else(|| "jpg".to_string())
         .trim()
@@ -119,9 +139,16 @@ pub async fn upload_handler(
         ));
     }
 
-    let job = state
+    let (job, token) = state
         .jobs
-        .create_job(&safe_name, &source_format, &target_format);
+        .create_job_with_token(&safe_name, &source_format, &target_format)
+        .map_err(|_| {
+            let _ = std::fs::remove_file(&temp_path);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "failed to create job" })),
+            )
+        })?;
     let job_dir = storage.create_job_dir(&job.id).map_err(|_| {
         let _ = std::fs::remove_file(&temp_path);
         (
@@ -151,6 +178,7 @@ pub async fn upload_handler(
         StatusCode::OK,
         Json(UploadResponse {
             job_id: job.id,
+            token,
             filename: safe_name,
             size_bytes,
         }),

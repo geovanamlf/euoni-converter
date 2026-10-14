@@ -19,3 +19,7 @@
     image = "0.25"
     rusqlite = { version = "0.32", features = ["bundled"] }
     tower-http = { version = "0.6", features = ["fs"] }
+    sha2 = "0.10"
+    subtle = "2.6"
+    tokio-util = { version = "0.7", features = ["io"] }
+    libc = "0.2"

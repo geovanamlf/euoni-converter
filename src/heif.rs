@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Encodes HEIC files through libheif after normalizing arbitrary image inputs.
 #[derive(Debug, Clone)]
@@ -34,31 +33,24 @@ impl HeifRunner {
         let normalized = temp_dir.join("normalized.png");
 
         let first_frame = format!("{}[0]", input.to_string_lossy());
-        let conversion = Command::new(&self.convert_binary)
-            .arg(first_frame)
-            .arg(&normalized)
-            .output()
-            .map_err(|err| format!("failed to start ImageMagick: {err}"))?;
+        let conversion_args = [std::ffi::OsStr::new(&first_frame), normalized.as_os_str()];
+        let conversion = crate::process::run(self.convert_binary.as_os_str(), &conversion_args)?;
         if !conversion.status.success() || !normalized.exists() {
             let _ = std::fs::remove_dir_all(&temp_dir);
-            return Err(format!(
-                "ImageMagick failed: {}",
-                String::from_utf8_lossy(&conversion.stderr).trim()
-            ));
+            return Err(format!("ImageMagick failed: {}", "ImageMagick failed"));
         }
 
-        let encoding = Command::new(&self.encoder_binary)
-            .args(Self::build_encode_args(&normalized, output))
-            .output()
-            .map_err(|err| format!("failed to start heif-enc: {err}"));
+        let encoding_args = Self::build_encode_args(&normalized, output);
+        let encoding_args = encoding_args
+            .iter()
+            .map(std::ffi::OsStr::new)
+            .collect::<Vec<_>>();
+        let encoding = crate::process::run(self.encoder_binary.as_os_str(), &encoding_args);
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         match encoding {
             Ok(result) if result.status.success() && output.exists() => Ok(()),
-            Ok(result) => Err(format!(
-                "heif-enc failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            )),
+            Ok(_) => Err("heif-enc failed".to_string()),
             Err(err) => Err(err),
         }
     }

@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 
@@ -23,7 +23,16 @@ pub struct UploadedFile {
 
 impl UploadedFile {
     pub fn detect_kind(file_path: &Path) -> FileKind {
-        let bytes = std::fs::read(file_path).unwrap_or_default();
+        let mut file = match File::open(file_path) {
+            Ok(file) => file,
+            Err(_) => return FileKind::Unknown,
+        };
+        let mut bytes = vec![0; 64 * 1024];
+        let length = match file.read(&mut bytes) {
+            Ok(length) => length,
+            Err(_) => return FileKind::Unknown,
+        };
+        bytes.truncate(length);
 
         if bytes.is_empty() {
             return FileKind::Unknown;
@@ -31,6 +40,13 @@ impl UploadedFile {
 
         if bytes.starts_with(b"%PDF") {
             return FileKind::Pdf;
+        }
+
+        if bytes
+            .windows(4)
+            .any(|window| window.eq_ignore_ascii_case(b"<svg"))
+        {
+            return FileKind::Image;
         }
 
         let kind = infer::get(&bytes);
@@ -105,14 +121,57 @@ pub async fn save_multipart_file(
             .map_err(|err| err.to_string())?;
     }
     file.flush().await.map_err(|err| err.to_string())?;
+    let kind = UploadedFile::detect_kind(destination);
 
     Ok(UploadedFile {
         original_name: original_name.to_string(),
         safe_name,
         saved_path: destination.to_path_buf(),
         size_bytes,
-        kind: FileKind::Unknown,
+        kind,
     })
+}
+
+pub fn validate_uploaded_format(path: &Path, extension: &str) -> Result<(), String> {
+    let metadata = std::fs::metadata(path).map_err(|_| "invalid uploaded file".to_string())?;
+    if metadata.len() == 0 {
+        return Err("empty file".to_string());
+    }
+
+    let extension = extension.to_ascii_lowercase();
+    let kind = UploadedFile::detect_kind(path);
+    let image_extensions = [
+        "png", "jpg", "jpeg", "webp", "bmp", "tiff", "tif", "gif", "svg", "ico", "heic", "avif",
+    ];
+    let document_extensions = ["docx", "txt", "html", "odt", "rtf"];
+
+    if extension == "pdf" {
+        return (kind == FileKind::Pdf)
+            .then_some(())
+            .ok_or_else(|| "file content does not match extension".to_string());
+    }
+    if image_extensions.contains(&extension.as_str()) {
+        return (kind == FileKind::Image)
+            .then_some(())
+            .ok_or_else(|| "file content does not match extension".to_string());
+    }
+    if document_extensions.contains(&extension.as_str()) {
+        let mut file = File::open(path).map_err(|_| "invalid uploaded file".to_string())?;
+        let mut prefix = [0; 8];
+        let read = file
+            .read(&mut prefix)
+            .map_err(|_| "invalid uploaded file".to_string())?;
+        let valid = match extension.as_str() {
+            "txt" | "html" => read > 0,
+            "rtf" => prefix[..read].starts_with(b"{\\rtf"),
+            "docx" | "odt" => prefix[..read].starts_with(b"PK"),
+            _ => false,
+        };
+        return valid
+            .then_some(())
+            .ok_or_else(|| "file content does not match extension".to_string());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -394,6 +394,9 @@ impl JobQueue {
 }
 
 pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), String> {
+    if !crate::storage::Storage::is_safe_job_id(job_id) {
+        return Err("invalid job id".to_string());
+    }
     let Some(job) = state.jobs.get(job_id) else {
         return Err("job not found".to_string());
     };
@@ -413,14 +416,25 @@ pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), St
 
     match execute_job(&job, &input_path, &output_path) {
         Ok(_) => {
+            let output_size = std::fs::metadata(&output_path)
+                .map_err(|_| "conversion did not create an output".to_string())?
+                .len();
+            if output_size > state.settings.max_output_size {
+                let _ = std::fs::remove_file(&output_path);
+                let error = "conversion output exceeded the configured limit".to_string();
+                state.jobs.set_error(job_id, &error);
+                return Err(error);
+            }
             state.jobs.set_output(job_id, &output_name);
             state.jobs.set_progress(job_id, 100);
             state.jobs.update_status(job_id, JobStatus::Completed);
             Ok(())
         }
         Err(err) => {
-            state.jobs.set_error(job_id, &err);
-            Err(err)
+            let _ = std::fs::remove_file(&output_path);
+            state.jobs.set_error(job_id, "conversion failed");
+            tracing::error!(job_id = %job_id, error = %err, "conversion failed");
+            Err("conversion failed".to_string())
         }
     }
 }

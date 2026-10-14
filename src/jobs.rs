@@ -1,6 +1,8 @@
 use rusqlite::{Connection, OptionalExtension, params};
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -59,9 +61,11 @@ impl JobStore {
                 source_format TEXT NOT NULL,
                 target_format TEXT NOT NULL,
                 progress INTEGER NOT NULL,
-                error TEXT
+                error TEXT,
+                token_hash TEXT
             );",
         )?;
+        let _ = connection.execute("ALTER TABLE jobs ADD COLUMN token_hash TEXT", []);
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
@@ -69,7 +73,25 @@ impl JobStore {
     }
 
     pub fn create_job(&self, input_name: &str, from: &str, to: &str) -> Job {
+        self.create_job_with_token(input_name, from, to)
+            .expect("failed to create job")
+            .0
+    }
+
+    pub fn create_job_with_token(
+        &self,
+        input_name: &str,
+        from: &str,
+        to: &str,
+    ) -> rusqlite::Result<(Job, String)> {
         let id = Uuid::new_v4().simple().to_string();
+        let token = format!(
+            "{}{}{}",
+            Uuid::new_v4().simple(),
+            Uuid::new_v4().simple(),
+            Uuid::new_v4().simple()
+        );
+        let token_hash = hash_token(&token);
         let job = Job {
             id: id.clone(),
             created_at: current_unix_time(),
@@ -84,21 +106,20 @@ impl JobStore {
             error: None,
         };
 
-        self.connection
-            .lock()
-            .expect("job database lock poisoned")
-            .execute(
-                "INSERT INTO jobs (id, created_at, status, input_name, output_name, source_format, target_format, progress, error)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        self.connection.lock().expect("job database lock poisoned").execute(
+                "INSERT INTO jobs (id, created_at, status, input_name, output_name, source_format, target_format, progress, error, token_hash)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     &job.id, job.created_at, status_name(&job.status), &job.input_name,
                     job.output_name.as_deref(), &job.payload.from, &job.payload.to,
-                    job.progress, job.error.as_deref()
+                    job.progress, job.error.as_deref(), token_hash
                 ],
-            )
-            .expect("failed to insert job");
+            )?;
 
-        self.get(&job.id).expect("inserted job should be readable")
+        Ok((
+            self.get(&job.id).expect("inserted job should be readable"),
+            token,
+        ))
     }
 
     pub fn get(&self, id: &str) -> Option<Job> {
@@ -111,6 +132,26 @@ impl JobStore {
             )
             .optional()
             .expect("failed to read job")
+    }
+
+    pub fn authorize(&self, id: &str, token: &str) -> bool {
+        let expected = self.connection.lock().ok().and_then(|connection| {
+            connection
+                .query_row(
+                    "SELECT token_hash FROM jobs WHERE id = ?1",
+                    params![id],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .optional()
+                .ok()
+                .flatten()
+                .flatten()
+        });
+        let Some(expected) = expected else {
+            return false;
+        };
+        let actual = hash_token(token);
+        expected.as_bytes().ct_eq(actual.as_bytes()).into()
     }
 
     pub fn list(&self) -> Vec<Job> {
@@ -236,6 +277,10 @@ fn row_to_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
     })
 }
 
+fn hash_token(token: &str) -> String {
+    format!("{:x}", Sha256::digest(token.as_bytes()))
+}
+
 fn status_name(status: &JobStatus) -> &'static str {
     match status {
         JobStatus::Queued => "queued",
@@ -263,9 +308,16 @@ fn current_unix_time() -> u64 {
         .as_secs()
 }
 
+impl Default for JobStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{JobStatus, JobStore};
+    use rusqlite::Connection;
 
     #[test]
     fn creates_job_in_queued_state() {
@@ -277,6 +329,53 @@ mod tests {
         assert_eq!(job.payload.to, "jpg");
         assert_eq!(job.progress, 0);
         assert!(store.get(&job.id).is_some());
+    }
+
+    #[test]
+    fn capability_token_is_unique_and_required() {
+        let store = JobStore::new();
+        let (first, first_token) = store
+            .create_job_with_token("first.png", "png", "jpg")
+            .unwrap();
+        let (second, second_token) = store
+            .create_job_with_token("second.png", "png", "jpg")
+            .unwrap();
+
+        assert_ne!(first_token, second_token);
+        assert!(store.authorize(&first.id, &first_token));
+        assert!(!store.authorize(&first.id, &second_token));
+        assert!(!store.authorize(&first.id, ""));
+        assert!(store.authorize(&second.id, &second_token));
+    }
+
+    #[test]
+    fn legacy_job_without_token_is_not_authorized() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute(
+                "CREATE TABLE jobs (
+                    id TEXT PRIMARY KEY,
+                    created_at INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    input_name TEXT NOT NULL,
+                    output_name TEXT,
+                    source_format TEXT NOT NULL,
+                    target_format TEXT NOT NULL,
+                    progress INTEGER NOT NULL,
+                    error TEXT
+                )",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO jobs VALUES ('0123456789abcdef0123456789abcdef', 0, 'queued', 'old.png', NULL, 'png', 'jpg', 0, NULL)",
+                [],
+            )
+            .unwrap();
+        let store = JobStore::from_connection(connection).unwrap();
+
+        assert!(!store.authorize("0123456789abcdef0123456789abcdef", "legacy-token"));
     }
 
     #[test]

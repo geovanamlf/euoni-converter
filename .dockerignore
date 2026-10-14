@@ -2,3 +2,9 @@ target/
 data/
 .git/
 .env
+.env.*
+!.env.example
+Dockerfile.test
+Dockerfile.test.dockerignore
+test-files/
+tests/

@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegRunner {
@@ -93,18 +92,11 @@ impl FfmpegRunner {
     }
 
     pub fn run(&self, args: &[String]) -> Result<(), String> {
-        let output = Command::new(&self.binary)
-            .args(args)
-            .output()
-            .map_err(|err| format!("failed to execute ffmpeg: {err}"))?;
+        let refs = args.iter().map(std::ffi::OsStr::new).collect::<Vec<_>>();
+        let output = crate::process::run(std::ffi::OsStr::new(&self.binary), &refs)?;
 
         if !output.status.success() {
-            let details = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            return Err(if details.is_empty() {
-                "ffmpeg exited with non-zero status".to_string()
-            } else {
-                format!("ffmpeg failed: {details}")
-            });
+            return Err("ffmpeg failed".to_string());
         }
 
         Ok(())

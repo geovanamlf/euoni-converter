@@ -12,7 +12,7 @@ use crate::{
     jobs::JobStore,
     routes::{
         create_job_handler, download_handler, get_job_handler, get_job_status_handler,
-        health_handler, index_handler, list_jobs_handler, system_handler, upload_handler,
+        health_handler, index_handler, system_handler, upload_handler,
     },
     worker::JobQueue,
 };
@@ -85,7 +85,7 @@ pub fn create_app(settings: Settings) -> Router {
         .route("/", get(index_handler))
         .route("/api/health", get(health_handler))
         .route("/api/system", get(system_handler))
-        .route("/api/jobs", post(create_job_handler).get(list_jobs_handler))
+        .route("/api/jobs", post(create_job_handler))
         .route("/api/jobs/{id}", get(get_job_handler))
         .route("/api/jobs/{id}/status", get(get_job_status_handler))
         .route("/api/jobs/{id}/download", get(download_handler))
@@ -162,17 +162,37 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
+        let created: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let job_id = created["job"]["id"].as_str().unwrap();
+        let token = created["token"].as_str().unwrap();
 
         let response = app
+            .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/api/jobs")
+                    .uri(format!("/api/jobs/{job_id}"))
                     .body(Body::empty())
                     .unwrap(),
             )
             .await
             .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/jobs/{job_id}"))
+                    .header("x-euoni-job-token", token)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
@@ -266,6 +286,7 @@ mod tests {
         )
         .unwrap();
         let job_id = upload["job_id"].as_str().unwrap().to_string();
+        let token = upload["token"].as_str().unwrap().to_string();
 
         let mut completed = false;
         for _ in 0..100 {
@@ -274,6 +295,7 @@ mod tests {
                 .oneshot(
                     Request::builder()
                         .uri(format!("/api/jobs/{job_id}/status"))
+                        .header("x-euoni-job-token", &token)
                         .body(Body::empty())
                         .unwrap(),
                 )
@@ -299,6 +321,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!("/api/jobs/{job_id}/download"))
+                    .header("x-euoni-job-token", &token)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -372,6 +395,7 @@ mod tests {
         )
         .unwrap();
         let job_id = upload["job_id"].as_str().unwrap().to_string();
+        let token = upload["token"].as_str().unwrap().to_string();
 
         let mut completed = false;
         for _ in 0..100 {
@@ -380,6 +404,7 @@ mod tests {
                 .oneshot(
                     Request::builder()
                         .uri(format!("/api/jobs/{job_id}/status"))
+                        .header("x-euoni-job-token", &token)
                         .body(Body::empty())
                         .unwrap(),
                 )
@@ -404,6 +429,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!("/api/jobs/{job_id}/download"))
+                    .header("x-euoni-job-token", &token)
                     .body(Body::empty())
                     .unwrap(),
             )

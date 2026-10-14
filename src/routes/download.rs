@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::Response,
 };
 
@@ -9,7 +9,15 @@ use crate::app::AppState;
 pub async fn download_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Response, (StatusCode, String)> {
+    let token = headers
+        .get("x-euoni-job-token")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    if !state.jobs.authorize(&id, token) {
+        return Err((StatusCode::NOT_FOUND, "job not found".to_string()));
+    }
     let Some(job) = state.jobs.get(&id) else {
         return Err((StatusCode::NOT_FOUND, "job not found".to_string()));
     };
@@ -28,12 +36,25 @@ pub async fn download_handler(
         return Err((StatusCode::NOT_FOUND, "output file not found".to_string()));
     }
 
-    let file = std::fs::read(&path).map_err(|_| {
+    let metadata = tokio::fs::metadata(&path).await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "unable to inspect output file".to_string(),
+        )
+    })?;
+    if metadata.len() > state.settings.max_output_size {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "output file exceeds configured limit".to_string(),
+        ));
+    }
+    let file = tokio::fs::File::open(&path).await.map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "unable to read output file".to_string(),
         )
     })?;
+    let stream = tokio_util::io::ReaderStream::new(file);
 
     let filename = path
         .file_name()
@@ -55,13 +76,18 @@ pub async fn download_handler(
         _ => "application/octet-stream",
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
         .header(
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{}\"", filename),
         )
-        .body(axum::body::Body::from(file))
-        .unwrap())
+        .body(axum::body::Body::from_stream(stream))
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "unable to build response".to_string(),
+            )
+        })
 }

@@ -32,9 +32,19 @@ impl Storage {
     }
 
     pub fn create_job_dir(&self, job_id: &str) -> Result<PathBuf, std::io::Error> {
+        if !Self::is_safe_job_id(job_id) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid job id",
+            ));
+        }
         let path = self.jobs.join(job_id);
         fs::create_dir_all(&path)?;
         Ok(path)
+    }
+
+    pub fn is_safe_job_id(job_id: &str) -> bool {
+        job_id.len() == 32 && job_id.bytes().all(|byte| byte.is_ascii_hexdigit())
     }
 
     pub fn ensure_safe_filename(filename: &str) -> Result<String, String> {

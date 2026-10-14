@@ -1,0 +1,11 @@
+<policymap>
+  <policy domain="coder" rights="none" pattern="MVG" />
+  <policy domain="coder" rights="none" pattern="MSL" />
+  <policy domain="coder" rights="none" pattern="PS" />
+  <policy domain="coder" rights="none" pattern="EPS" />
+  <policy domain="coder" rights="none" pattern="XPS" />
+  <policy domain="path" rights="none" pattern="@*" />
+  <policy domain="path" rights="none" pattern="HTTP:*" />
+  <policy domain="path" rights="none" pattern="HTTPS:*" />
+  <policy domain="path" rights="none" pattern="FTP:*" />
+</policymap>

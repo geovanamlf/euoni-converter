@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone, Default)]
 pub struct DocumentRunner {
@@ -64,7 +63,7 @@ impl DocumentRunner {
         self.run_command(&self.pdftotext, &[input, &extracted], "pdftotext")?;
         let result = self.run_libreoffice(&extracted, output, &temp_dir, to);
         let _ = std::fs::remove_file(&extracted);
-        let _ = std::fs::remove_dir(&temp_dir);
+        let _ = std::fs::remove_dir(temp_dir);
         result
     }
 
@@ -75,18 +74,18 @@ impl DocumentRunner {
         temp_dir: &Path,
         to: &str,
     ) -> Result<(), String> {
-        let result = Command::new(&self.libreoffice)
-            .args(["--headless", "--convert-to", to, "--outdir"])
-            .arg(&temp_dir)
-            .arg(input)
-            .output()
-            .map_err(|err| format!("failed to start LibreOffice: {err}"))?;
+        let args = [
+            std::ffi::OsStr::new("--headless"),
+            std::ffi::OsStr::new("--convert-to"),
+            std::ffi::OsStr::new(to),
+            std::ffi::OsStr::new("--outdir"),
+            temp_dir.as_os_str(),
+            input.as_os_str(),
+        ];
+        let result = crate::process::run(self.libreoffice.as_os_str(), &args)?;
 
         if !result.status.success() {
-            return Err(format!(
-                "LibreOffice failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            ));
+            return Err("LibreOffice failed".to_string());
         }
 
         let generated = temp_dir.join(format!(
@@ -98,29 +97,24 @@ impl DocumentRunner {
             to
         ));
         if !generated.exists() {
-            return Err(format!(
-                "LibreOffice did not create the output file: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            ));
+            return Err("LibreOffice did not create the output file".to_string());
         }
 
         std::fs::rename(&generated, output).map_err(|err| err.to_string())?;
-        let _ = std::fs::remove_dir(&temp_dir);
+        let _ = std::fs::remove_dir(temp_dir);
         Ok(())
     }
 
     fn run_pdf_to_html(&self, input: &Path, output: &Path) -> Result<(), String> {
-        let result = Command::new(&self.pdftohtml)
-            .args(["-s", "-noframes"])
-            .arg(input)
-            .arg(output)
-            .output()
-            .map_err(|err| format!("failed to start pdftohtml: {err}"))?;
+        let args = [
+            std::ffi::OsStr::new("-s"),
+            std::ffi::OsStr::new("-noframes"),
+            input.as_os_str(),
+            output.as_os_str(),
+        ];
+        let result = crate::process::run(self.pdftohtml.as_os_str(), &args)?;
         if !result.status.success() {
-            return Err(format!(
-                "pdftohtml failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            ));
+            return Err("pdftohtml failed".to_string());
         }
         if !output.exists() {
             return Err("pdftohtml did not create the output file".to_string());
@@ -129,17 +123,13 @@ impl DocumentRunner {
     }
 
     fn run_command(&self, command: &Path, args: &[&Path], name: &str) -> Result<(), String> {
-        let result = Command::new(command)
-            .args(args)
-            .output()
-            .map_err(|err| format!("failed to start {name}: {err}"))?;
+        let expected_output = args[1];
+        let converted_args = args.iter().map(|path| path.as_os_str()).collect::<Vec<_>>();
+        let result = crate::process::run(command.as_os_str(), &converted_args)?;
         if !result.status.success() {
-            return Err(format!(
-                "{name} failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            ));
+            return Err(format!("{name} failed"));
         }
-        if !args[1].exists() {
+        if !expected_output.exists() {
             return Err(format!("{name} did not create the output file"));
         }
         Ok(())

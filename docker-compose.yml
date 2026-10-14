@@ -9,9 +9,30 @@ services:
       DATA_DIR: /data
       MAX_WORKERS: 2
       JOB_RETENTION_HOURS: 24
-      MAX_UPLOAD_SIZE: 2147483648
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-536870912}
+      MAX_OUTPUT_SIZE: ${MAX_OUTPUT_SIZE:-1073741824}
+      CONVERSION_TIMEOUT_SECONDS: ${CONVERSION_TIMEOUT_SECONDS:-300}
     volumes:
       - euoni-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    pids_limit: ${EUONI_PIDS_LIMIT:-128}
+    cpus: ${EUONI_CPUS:-2.0}
+    mem_limit: ${EUONI_MEMORY_LIMIT:-2g}
+    logging:
+      driver: json-file
+      options:
+        max-size: ${EUONI_LOG_MAX_SIZE:-10m}
+        max-file: ${EUONI_LOG_MAX_FILES:-3}
     restart: unless-stopped
 
 volumes:

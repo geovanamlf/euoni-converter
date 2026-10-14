@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone, Default)]
 pub struct PdfRunner {
@@ -29,16 +28,11 @@ impl PdfRunner {
 
     pub fn run(&self, input: &Path, output: &Path) -> Result<(), String> {
         let args = Self::build_args(input, output);
-        let result = Command::new(&self.binary)
-            .args(&args)
-            .output()
-            .map_err(|err| format!("failed to start pdftoppm: {err}"))?;
+        let refs = args.iter().map(std::ffi::OsStr::new).collect::<Vec<_>>();
+        let result = crate::process::run(self.binary.as_os_str(), &refs)?;
 
         if !result.status.success() {
-            return Err(format!(
-                "pdftoppm failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            ));
+            return Err(format!("pdftoppm failed: {}", "pdftoppm failed"));
         }
 
         if !output.exists() {
@@ -78,78 +72,69 @@ impl ImageToPdfRunner {
         std::fs::create_dir_all(&temp_dir).map_err(|err| err.to_string())?;
         let normalized = temp_dir.join("normalized.png");
         let first_frame = format!("{}[0]", input.to_string_lossy());
-        let image_result = Command::new(&self.binary)
-            .args([
-                first_frame.as_str(),
-                "-depth",
-                "8",
-                normalized.to_string_lossy().as_ref(),
-            ])
-            .output()
-            .map_err(|err| format!("failed to start ImageMagick: {err}"))?;
+        let image_args = [
+            std::ffi::OsStr::new(&first_frame),
+            std::ffi::OsStr::new("-depth"),
+            std::ffi::OsStr::new("8"),
+            normalized.as_os_str(),
+        ];
+        let image_result = crate::process::run(self.binary.as_os_str(), &image_args)?;
 
         if !image_result.status.success() || !normalized.exists() {
             let _ = std::fs::remove_dir_all(&temp_dir);
-            return Err(format!(
-                "ImageMagick failed: {}",
-                String::from_utf8_lossy(&image_result.stderr).trim()
-            ));
+            return Err(format!("ImageMagick failed: {}", "ImageMagick failed"));
         }
 
-        let pdf_result = Command::new(&self.pdf_binary)
-            .arg(&normalized)
-            .arg("-o")
-            .arg(output)
-            .output();
+        let pdf_args = [
+            normalized.as_os_str(),
+            std::ffi::OsStr::new("-o"),
+            output.as_os_str(),
+        ];
+        let pdf_result = crate::process::run(self.pdf_binary.as_os_str(), &pdf_args);
         let _ = std::fs::remove_dir_all(&temp_dir);
         match pdf_result {
             Ok(result) if result.status.success() && output.exists() => Ok(()),
             Err(_) => {
-                let fallback = Command::new(&self.binary)
-                    .arg(input)
-                    .arg(output)
-                    .output()
-                    .map_err(|err| format!("failed to start PDF converter: {err}"))?;
+                let fallback_args = [input.as_os_str(), output.as_os_str()];
+                let fallback = crate::process::run(self.binary.as_os_str(), &fallback_args)?;
                 if fallback.status.success() && output.exists() {
                     Ok(())
                 } else {
                     Err(format!(
                         "PDF conversion failed: {}",
-                        String::from_utf8_lossy(&fallback.stderr).trim()
+                        "PDF conversion failed"
                     ))
                 }
             }
-            Ok(result) => Err(format!(
-                "img2pdf failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            )),
+            Ok(_) => Err("img2pdf failed".to_string()),
         }
     }
 
     pub fn run_image(&self, input: &Path, output: &Path) -> Result<(), String> {
         let first_frame = format!("{}[0]", input.to_string_lossy());
-        let mut command = Command::new(&self.binary);
-        command.arg(first_frame);
-
         if output.extension().and_then(|extension| extension.to_str()) == Some("ico") {
-            command.args([
-                "-resize",
-                "256x256>",
-                "-define",
-                "icon:auto-resize=256,128,64,48,32,16",
-            ]);
+            let args = [
+                std::ffi::OsStr::new(&first_frame),
+                std::ffi::OsStr::new("-resize"),
+                std::ffi::OsStr::new("256x256>"),
+                std::ffi::OsStr::new("-define"),
+                std::ffi::OsStr::new("icon:auto-resize=256,128,64,48,32,16"),
+                output.as_os_str(),
+            ];
+            return crate::process::run(self.binary.as_os_str(), &args).and_then(|result| {
+                if result.status.success() && output.exists() {
+                    Ok(())
+                } else {
+                    Err("ImageMagick failed".to_string())
+                }
+            });
         }
 
-        let result = command
-            .arg(output)
-            .output()
-            .map_err(|err| format!("failed to start ImageMagick: {err}"))?;
+        let args = [std::ffi::OsStr::new(&first_frame), output.as_os_str()];
+        let result = crate::process::run(self.binary.as_os_str(), &args)?;
 
         if !result.status.success() {
-            return Err(format!(
-                "ImageMagick failed: {}",
-                String::from_utf8_lossy(&result.stderr).trim()
-            ));
+            return Err(format!("ImageMagick failed: {}", "ImageMagick failed"));
         }
 
         if !output.exists() {

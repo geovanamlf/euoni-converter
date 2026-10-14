@@ -1,8 +1,7 @@
 use axum::{
     Json,
     extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    http::{HeaderMap, StatusCode},
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +18,7 @@ pub struct CreateJobRequest {
 #[derive(Debug, Clone, Serialize)]
 pub struct CreateJobResponse {
     pub job: Job,
+    pub token: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -59,7 +59,14 @@ pub async fn create_job_handler(
         ));
     }
     let store = state.jobs.clone();
-    let job = store.create_job(&input_name, &from, &to);
+    let (job, token) = store
+        .create_job_with_token(&input_name, &from, &to)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "failed to create job" })),
+            )
+        })?;
 
     if state.queue.enqueue(job.id.clone()).await.is_err() {
         state.jobs.set_error(&job.id, "failed to enqueue job");
@@ -69,41 +76,53 @@ pub async fn create_job_handler(
         ));
     }
 
-    Ok((StatusCode::CREATED, Json(CreateJobResponse { job })))
+    Ok((StatusCode::CREATED, Json(CreateJobResponse { job, token })))
 }
 
 pub async fn get_job_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<JobResponse>, (StatusCode, Json<serde_json::Value>)> {
-    match state.jobs.get(&id) {
-        Some(job) => Ok(Json(JobResponse { job })),
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "job not found" })),
-        )),
+    match authorized_job(&state, &id, &headers) {
+        Ok(job) => Ok(Json(JobResponse { job })),
+        Err(error) => Err(error),
     }
 }
 
 pub async fn get_job_status_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<JobStatusResponse>, (StatusCode, Json<serde_json::Value>)> {
-    match state.jobs.get(&id) {
-        Some(job) => Ok(Json(JobStatusResponse {
+    match authorized_job(&state, &id, &headers) {
+        Ok(job) => Ok(Json(JobStatusResponse {
             id: job.id.clone(),
             status: format!("{:?}", job.status).to_ascii_lowercase(),
             progress: job.progress,
             error: job.error.clone(),
         })),
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "job not found" })),
-        )),
+        Err(error) => Err(error),
     }
 }
 
-pub async fn list_jobs_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let jobs = state.jobs.list();
-    (StatusCode::OK, Json(serde_json::json!({ "jobs": jobs })))
+fn authorized_job(
+    state: &AppState,
+    id: &str,
+    headers: &HeaderMap,
+) -> Result<Job, (StatusCode, Json<serde_json::Value>)> {
+    let token = headers
+        .get("x-euoni-job-token")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    if !state.jobs.authorize(id, token) {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "job not found" })),
+        ));
+    }
+    state.jobs.get(id).ok_or((
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({ "error": "job not found" })),
+    ))
 }

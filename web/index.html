@@ -1161,6 +1161,13 @@
 
     const jobs = new Map();
 
+    jobsContainer.addEventListener('click', event => {
+      const download = event.target.closest('[data-download-job]');
+      if (!download) return;
+      event.preventDefault();
+      downloadJob(download.dataset.downloadJob);
+    });
+
     choose.addEventListener('click', event => {
       event.stopPropagation();
       input.click();
@@ -1303,6 +1310,7 @@
 
         jobs.set(result.job_id, {
           id: result.job_id,
+          token: result.token,
           name: result.filename,
           from: extension(result.filename),
           to: format.value,
@@ -1333,7 +1341,9 @@
       if (!job) return;
 
       try {
-        const response = await fetch(`/api/jobs/${id}/status`);
+        const response = await fetch(`/api/jobs/${id}/status`, {
+          headers: { 'X-Euoni-Job-Token': job.token }
+        });
         const status = await response.json();
 
         Object.assign(job, {
@@ -1394,17 +1404,35 @@
           ${
             job.status === 'completed'
               ? `
-                <a
+                <button
                   class="download"
-                  href="/api/jobs/${job.id}/download"
+                  type="button"
+                  data-download-job="${escapeHtml(job.id)}"
                 >
                   Baixar
-                </a>
+                </button>
               `
               : '<span></span>'
           }
         </article>
       `).join('');
+    }
+
+    async function downloadJob(id) {
+      const job = jobs.get(id);
+      if (!job) return;
+
+      const response = await fetch(`/api/jobs/${id}/download`, {
+        headers: { 'X-Euoni-Job-Token': job.token }
+      });
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `converted.${job.to}`;
+      link.click();
+      URL.revokeObjectURL(url);
     }
 
     function label(status) {

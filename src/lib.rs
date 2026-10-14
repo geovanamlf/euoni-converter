@@ -6,6 +6,7 @@ pub mod ffmpeg;
 pub mod heif;
 pub mod jobs;
 pub mod pdf;
+pub mod process;
 pub mod routes;
 pub mod storage;
 pub mod upload;
