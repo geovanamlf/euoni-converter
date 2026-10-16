@@ -25,6 +25,15 @@ impl HeifRunner {
     }
 
     pub fn run(&self, input: &Path, output: &Path) -> Result<(), String> {
+        self.run_with_limit(input, output, u64::MAX)
+    }
+
+    pub fn run_with_limit(
+        &self,
+        input: &Path,
+        output: &Path,
+        max_output_size: u64,
+    ) -> Result<(), String> {
         let temp_dir = output
             .parent()
             .ok_or_else(|| "HEIC output has no parent directory".to_string())?
@@ -34,7 +43,12 @@ impl HeifRunner {
 
         let first_frame = format!("{}[0]", input.to_string_lossy());
         let conversion_args = [std::ffi::OsStr::new(&first_frame), normalized.as_os_str()];
-        let conversion = crate::process::run(self.convert_binary.as_os_str(), &conversion_args)?;
+        let conversion = crate::process::run_limited(
+            self.convert_binary.as_os_str(),
+            &conversion_args,
+            &normalized,
+            max_output_size,
+        )?;
         if !conversion.status.success() || !normalized.exists() {
             let _ = std::fs::remove_dir_all(&temp_dir);
             return Err(format!("ImageMagick failed: {}", "ImageMagick failed"));
@@ -45,7 +59,12 @@ impl HeifRunner {
             .iter()
             .map(std::ffi::OsStr::new)
             .collect::<Vec<_>>();
-        let encoding = crate::process::run(self.encoder_binary.as_os_str(), &encoding_args);
+        let encoding = crate::process::run_limited(
+            self.encoder_binary.as_os_str(),
+            &encoding_args,
+            output,
+            max_output_size,
+        );
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         match encoding {

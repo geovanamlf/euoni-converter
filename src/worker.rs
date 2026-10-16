@@ -222,6 +222,15 @@ pub fn execute_image_conversion(
     output_path: &Path,
     conversion: &ImageConversion,
 ) -> Result<(), String> {
+    execute_image_conversion_with_limit(input_path, output_path, conversion, u64::MAX)
+}
+
+fn execute_image_conversion_with_limit(
+    input_path: &Path,
+    output_path: &Path,
+    conversion: &ImageConversion,
+    max_output_size: u64,
+) -> Result<(), String> {
     if !matches!(
         conversion,
         ImageConversion::PngToJpg
@@ -231,7 +240,11 @@ pub fn execute_image_conversion(
             | ImageConversion::PngToWebp
             | ImageConversion::JpgToWebp
     ) {
-        return crate::pdf::ImageToPdfRunner::system().run_image(input_path, output_path);
+        return crate::pdf::ImageToPdfRunner::system().run_image_with_limit(
+            input_path,
+            output_path,
+            max_output_size,
+        );
     }
 
     let img =
@@ -249,16 +262,34 @@ pub fn execute_image_conversion(
                 ImageConversion::PngToJpg
                 | ImageConversion::WebpToJpg
                 | ImageConversion::JpgToWebp => {
-                    rgb.save(output_path)
-                        .map_err(|err| format!("failed to write output image: {err}"))?;
+                    let format = if matches!(
+                        conversion,
+                        ImageConversion::PngToJpg
+                            | ImageConversion::WebpToJpg
+                            | ImageConversion::JpgToWebp
+                    ) {
+                        image::ImageFormat::Jpeg
+                    } else {
+                        image::ImageFormat::WebP
+                    };
+                    write_image_with_limit(
+                        image::DynamicImage::ImageRgb8(rgb),
+                        output_path,
+                        format,
+                        max_output_size,
+                    )?;
                 }
                 ImageConversion::JpgToPng
                 | ImageConversion::WebpToPng
                 | ImageConversion::PngToWebp => {
-                    img.to_rgba8()
-                        .save(output_path)
-                        .map_err(|err| format!("failed to write output image: {err}"))?;
+                    write_image_with_limit(
+                        image::DynamicImage::ImageRgba8(img.to_rgba8()),
+                        output_path,
+                        image::ImageFormat::Png,
+                        max_output_size,
+                    )?;
                 }
+
                 _ => unreachable!("ImageMagick conversions return before decoding"),
             }
         }
@@ -268,10 +299,64 @@ pub fn execute_image_conversion(
     Ok(())
 }
 
+fn write_image_with_limit(
+    image: image::DynamicImage,
+    output_path: &Path,
+    format: image::ImageFormat,
+    max_output_size: u64,
+) -> Result<(), String> {
+    let file = std::fs::File::create(output_path).map_err(|err| err.to_string())?;
+    let mut writer = LimitedWriter::new(file, max_output_size);
+    image
+        .write_to(&mut writer, format)
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+struct LimitedWriter {
+    inner: std::fs::File,
+    limit: u64,
+}
+
+impl std::io::Write for LimitedWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        let written = self.inner.write(buffer)?;
+        if self.inner.metadata()?.len() > self.limit {
+            return Err(std::io::Error::other("output size limit exceeded"));
+        }
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl std::io::Seek for LimitedWriter {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.inner.seek(position)
+    }
+}
+
+impl LimitedWriter {
+    fn new(inner: std::fs::File, limit: u64) -> Self {
+        Self { inner, limit }
+    }
+}
+
 pub fn execute_audio_conversion(
     input_path: &Path,
     output_path: &Path,
     conversion: &AudioConversion,
+) -> Result<(), String> {
+    execute_audio_conversion_with_limit(input_path, output_path, conversion, u64::MAX)
+}
+
+fn execute_audio_conversion_with_limit(
+    input_path: &Path,
+    output_path: &Path,
+    conversion: &AudioConversion,
+    max_output_size: u64,
 ) -> Result<(), String> {
     let runner = crate::ffmpeg::FfmpegRunner::default();
     let args = match conversion {
@@ -295,13 +380,22 @@ pub fn execute_audio_conversion(
         }
     };
 
-    runner.run(&args)
+    runner.run_with_limit(&args, max_output_size)
 }
 
 pub fn execute_video_conversion(
     input_path: &Path,
     output_path: &Path,
     conversion: &VideoConversion,
+) -> Result<(), String> {
+    execute_video_conversion_with_limit(input_path, output_path, conversion, u64::MAX)
+}
+
+fn execute_video_conversion_with_limit(
+    input_path: &Path,
+    output_path: &Path,
+    conversion: &VideoConversion,
+    max_output_size: u64,
 ) -> Result<(), String> {
     let runner = crate::ffmpeg::FfmpegRunner::default();
     let args = match conversion {
@@ -325,7 +419,7 @@ pub fn execute_video_conversion(
         }
     };
 
-    runner.run(&args)
+    runner.run_with_limit(&args, max_output_size)
 }
 
 pub fn execute_pdf_conversion(
@@ -333,9 +427,18 @@ pub fn execute_pdf_conversion(
     output_path: &Path,
     conversion: &PdfConversion,
 ) -> Result<(), String> {
+    execute_pdf_conversion_with_limit(input_path, output_path, conversion, u64::MAX)
+}
+
+fn execute_pdf_conversion_with_limit(
+    input_path: &Path,
+    output_path: &Path,
+    conversion: &PdfConversion,
+    max_output_size: u64,
+) -> Result<(), String> {
     match conversion {
         PdfConversion::PdfToPng | PdfConversion::PdfToJpg => {
-            crate::pdf::PdfRunner::system().run(input_path, output_path)
+            crate::pdf::PdfRunner::system().run_with_limit(input_path, output_path, max_output_size)
         }
         PdfConversion::PngToPdf
         | PdfConversion::JpgToPdf
@@ -346,32 +449,58 @@ pub fn execute_pdf_conversion(
         | PdfConversion::SvgToPdf
         | PdfConversion::HeicToPdf
         | PdfConversion::AvifToPdf
-        | PdfConversion::IcoToPdf => {
-            crate::pdf::ImageToPdfRunner::system().run(input_path, output_path)
-        }
+        | PdfConversion::IcoToPdf => crate::pdf::ImageToPdfRunner::system().run_with_limit(
+            input_path,
+            output_path,
+            max_output_size,
+        ),
     }
 }
 
 pub fn execute_job(job: &Job, input_path: &Path, output_path: &Path) -> Result<(), String> {
+    execute_job_with_limit(job, input_path, output_path, u64::MAX)
+}
+
+pub fn execute_job_with_limit(
+    job: &Job,
+    input_path: &Path,
+    output_path: &Path,
+    max_output_size: u64,
+) -> Result<(), String> {
     let plan = plan_conversion(job)?;
 
     match plan.conversion {
-        ConversionKind::Image(ref conversion) => {
-            execute_image_conversion(input_path, output_path, conversion)
-        }
-        ConversionKind::Heic => crate::heif::HeifRunner::system().run(input_path, output_path),
-        ConversionKind::Audio(ref conversion) => {
-            execute_audio_conversion(input_path, output_path, conversion)
-        }
-        ConversionKind::Video(ref conversion) => {
-            execute_video_conversion(input_path, output_path, conversion)
-        }
+        ConversionKind::Image(ref conversion) => execute_image_conversion_with_limit(
+            input_path,
+            output_path,
+            conversion,
+            max_output_size,
+        ),
+        ConversionKind::Heic => crate::heif::HeifRunner::system().run_with_limit(
+            input_path,
+            output_path,
+            max_output_size,
+        ),
+        ConversionKind::Audio(ref conversion) => execute_audio_conversion_with_limit(
+            input_path,
+            output_path,
+            conversion,
+            max_output_size,
+        ),
+        ConversionKind::Video(ref conversion) => execute_video_conversion_with_limit(
+            input_path,
+            output_path,
+            conversion,
+            max_output_size,
+        ),
         ConversionKind::Pdf(ref conversion) => {
-            execute_pdf_conversion(input_path, output_path, conversion)
+            execute_pdf_conversion_with_limit(input_path, output_path, conversion, max_output_size)
         }
-        ConversionKind::Document(_) => {
-            crate::documents::DocumentRunner::system().run(input_path, output_path)
-        }
+        ConversionKind::Document(_) => crate::documents::DocumentRunner::system().run_with_limit(
+            input_path,
+            output_path,
+            max_output_size,
+        ),
     }
 }
 
@@ -401,42 +530,167 @@ pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), St
         return Err("job not found".to_string());
     };
 
-    state.jobs.update_status(job_id, JobStatus::Processing);
-    state.jobs.set_progress(job_id, 10);
+    if state
+        .jobs
+        .update_status(job_id, JobStatus::Processing)
+        .is_none()
+    {
+        return Err("job disappeared before processing".to_string());
+    }
+    if state.jobs.set_progress(job_id, 10).is_none() {
+        return fail_job(
+            state,
+            job_id,
+            &Path::new(&state.settings.data_dir)
+                .join("jobs")
+                .join(job_id)
+                .join(format!("converted.{}", job.payload.to)),
+            "failed to record processing progress",
+        );
+    }
 
-    let input_path = Path::new(&state.settings.data_dir)
+    let job_dir = Path::new(&state.settings.data_dir)
         .join("jobs")
-        .join(job_id)
-        .join(&job.input_name);
-    let output_name = format!("converted.{}", job.payload.to);
-    let output_path = Path::new(&state.settings.data_dir)
-        .join("jobs")
-        .join(job_id)
-        .join(&output_name);
-
-    match execute_job(&job, &input_path, &output_path) {
-        Ok(_) => {
-            let output_size = std::fs::metadata(&output_path)
-                .map_err(|_| "conversion did not create an output".to_string())?
-                .len();
-            if output_size > state.settings.max_output_size {
-                let _ = std::fs::remove_file(&output_path);
-                let error = "conversion output exceeded the configured limit".to_string();
-                state.jobs.set_error(job_id, &error);
-                return Err(error);
-            }
-            state.jobs.set_output(job_id, &output_name);
-            state.jobs.set_progress(job_id, 100);
-            state.jobs.update_status(job_id, JobStatus::Completed);
-            Ok(())
+        .join(job_id);
+    let input_name = match crate::storage::Storage::ensure_safe_filename(&job.input_name) {
+        Ok(input_name) => input_name,
+        Err(error) => {
+            return fail_job(
+                state,
+                job_id,
+                &job_dir.join("converted.invalid"),
+                &format!("invalid persisted input filename: {error}"),
+            );
         }
-        Err(err) => {
-            let _ = std::fs::remove_file(&output_path);
-            state.jobs.set_error(job_id, "conversion failed");
-            tracing::error!(job_id = %job_id, error = %err, "conversion failed");
-            Err("conversion failed".to_string())
+    };
+    let input_path = job_dir.join(input_name);
+    let output_name = format!("converted.{}", job.payload.to);
+    if crate::storage::Storage::ensure_safe_filename(&output_name).is_err() {
+        return fail_job(
+            state,
+            job_id,
+            &job_dir.join("converted.invalid"),
+            "invalid persisted output filename",
+        );
+    }
+    let output_path = job_dir.join(&output_name);
+
+    match std::fs::symlink_metadata(&input_path) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => {
+            return fail_job(
+                state,
+                job_id,
+                &output_path,
+                "input path is not a regular file",
+            );
+        }
+        Err(error) => {
+            return fail_job(
+                state,
+                job_id,
+                &output_path,
+                &format!("failed to inspect input file: {error}"),
+            );
         }
     }
+
+    match execute_job_with_limit(
+        &job,
+        &input_path,
+        &output_path,
+        state.settings.max_output_size,
+    ) {
+        Ok(_) => complete_job(state, job_id, &output_name, &output_path),
+        Err(err) => {
+            tracing::error!(job_id = %job_id, error = %err, "conversion failed");
+            fail_job(state, job_id, &output_path, &err)
+        }
+    }
+}
+
+fn complete_job(
+    state: &AppState,
+    job_id: &str,
+    output_name: &str,
+    output_path: &Path,
+) -> Result<(), String> {
+    let metadata = match std::fs::symlink_metadata(output_path) {
+        Ok(metadata) if metadata.is_file() => metadata,
+        Ok(_) => {
+            return fail_job(
+                state,
+                job_id,
+                output_path,
+                "conversion output is not a regular file",
+            );
+        }
+        Err(error) => {
+            return fail_job(
+                state,
+                job_id,
+                output_path,
+                &format!("failed to inspect conversion output: {error}"),
+            );
+        }
+    };
+
+    if metadata.len() > state.settings.max_output_size {
+        return fail_job(
+            state,
+            job_id,
+            output_path,
+            "conversion output exceeded the configured limit",
+        );
+    }
+
+    if let Err(error) = std::fs::File::open(output_path) {
+        return fail_job(
+            state,
+            job_id,
+            output_path,
+            &format!("failed to open conversion output: {error}"),
+        );
+    }
+
+    if state.jobs.set_output(job_id, output_name).is_none()
+        || state.jobs.set_progress(job_id, 100).is_none()
+        || state
+            .jobs
+            .update_status(job_id, JobStatus::Completed)
+            .is_none()
+    {
+        return fail_job(
+            state,
+            job_id,
+            output_path,
+            "failed to persist completed job",
+        );
+    }
+
+    Ok(())
+}
+
+fn fail_job(
+    state: &AppState,
+    job_id: &str,
+    output_path: &Path,
+    detail: &str,
+) -> Result<(), String> {
+    match std::fs::remove_file(output_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            tracing::warn!(
+                job_id = %job_id,
+                error = %error,
+                "failed to remove partial conversion output"
+            );
+        }
+        Err(_) => {}
+    }
+    state.jobs.set_error(job_id, "conversion failed");
+    tracing::error!(job_id = %job_id, error = %detail, "job processing failed");
+    Err("conversion failed".to_string())
 }
 
 #[cfg(test)]
@@ -446,9 +700,26 @@ mod tests {
         execute_audio_conversion, execute_image_conversion, execute_job, is_supported_conversion,
         plan_conversion,
     };
-    use crate::jobs::{Job, JobPayload, JobStatus};
+    use crate::{
+        app::AppState,
+        config::Settings,
+        jobs::{Job, JobPayload, JobStatus, JobStore},
+        storage::Storage,
+    };
     use std::fs;
     use std::process::Command;
+
+    fn test_state(data_dir: &std::path::Path) -> AppState {
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        AppState {
+            settings: Settings {
+                data_dir: data_dir.to_string_lossy().into_owned(),
+                ..Settings::default()
+            },
+            jobs: JobStore::new(),
+            queue: super::JobQueue::new(tx),
+        }
+    }
 
     #[test]
     fn plans_supported_png_to_jpg_conversion() {
@@ -654,6 +925,103 @@ mod tests {
             conversion_for_formats("png", "heic"),
             Ok(ConversionKind::Heic)
         );
+    }
+
+    #[tokio::test]
+    async fn missing_input_marks_job_failed() {
+        let data_dir =
+            std::env::temp_dir().join(format!("euoni-worker-missing-input-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&data_dir);
+        let storage = Storage::new(&data_dir).unwrap();
+        let state = test_state(&data_dir);
+        let job = state.jobs.create_job("missing.png", "png", "jpg");
+        storage.create_job_dir(&job.id).unwrap();
+
+        let result = super::process_queued_job(&state, &job.id).await;
+
+        assert_eq!(result.unwrap_err(), "conversion failed");
+        assert_eq!(state.jobs.get(&job.id).unwrap().status, JobStatus::Failed);
+        assert!(state.jobs.get(&job.id).unwrap().error.is_some());
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[tokio::test]
+    async fn output_within_limit_completes_and_output_above_limit_is_cleaned() {
+        let data_dir =
+            std::env::temp_dir().join(format!("euoni-worker-output-limit-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&data_dir);
+        let storage = Storage::new(&data_dir).unwrap();
+        let state = test_state(&data_dir);
+        let source = image::RgbaImage::from_pixel(8, 8, image::Rgba([255, 0, 0, 255]));
+
+        let within = state.jobs.create_job("source.png", "png", "jpg");
+        let within_dir = storage.create_job_dir(&within.id).unwrap();
+        source.save(within_dir.join("source.png")).unwrap();
+        let result = super::process_queued_job(&state, &within.id).await;
+        assert!(result.is_ok());
+        assert_eq!(
+            state.jobs.get(&within.id).unwrap().status,
+            JobStatus::Completed
+        );
+
+        let over = state.jobs.create_job("source.png", "png", "jpg");
+        let over_dir = storage.create_job_dir(&over.id).unwrap();
+        source.save(over_dir.join("source.png")).unwrap();
+        let mut limited_state = state.clone();
+        limited_state.settings.max_output_size = 1;
+        let result = super::process_queued_job(&limited_state, &over.id).await;
+        assert_eq!(result.unwrap_err(), "conversion failed");
+        assert_eq!(state.jobs.get(&over.id).unwrap().status, JobStatus::Failed);
+        assert!(!over_dir.join("converted.jpg").exists());
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[test]
+    fn missing_output_marks_job_failed() {
+        let data_dir = std::env::temp_dir().join(format!(
+            "euoni-worker-missing-output-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&data_dir);
+        let storage = Storage::new(&data_dir).unwrap();
+        let state = test_state(&data_dir);
+        let job = state.jobs.create_job("source.png", "png", "jpg");
+        let job_dir = storage.create_job_dir(&job.id).unwrap();
+        let output_path = job_dir.join("converted.jpg");
+        state.jobs.update_status(&job.id, JobStatus::Processing);
+
+        let result = super::complete_job(&state, &job.id, "converted.jpg", &output_path);
+
+        assert_eq!(result.unwrap_err(), "conversion failed");
+        assert_eq!(state.jobs.get(&job.id).unwrap().status, JobStatus::Failed);
+
+        let _ = fs::remove_dir_all(&data_dir);
+    }
+
+    #[test]
+    fn non_regular_output_marks_job_failed_without_removing_the_directory() {
+        let data_dir = std::env::temp_dir().join(format!(
+            "euoni-worker-directory-output-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&data_dir);
+        let storage = Storage::new(&data_dir).unwrap();
+        let state = test_state(&data_dir);
+        let job = state.jobs.create_job("source.png", "png", "jpg");
+        let job_dir = storage.create_job_dir(&job.id).unwrap();
+        let output_path = job_dir.join("converted.jpg");
+        fs::create_dir(&output_path).unwrap();
+        state.jobs.update_status(&job.id, JobStatus::Processing);
+
+        let result = super::complete_job(&state, &job.id, "converted.jpg", &output_path);
+
+        assert_eq!(result.unwrap_err(), "conversion failed");
+        assert_eq!(state.jobs.get(&job.id).unwrap().status, JobStatus::Failed);
+        assert!(output_path.is_dir());
+
+        let _ = fs::remove_dir_all(&data_dir);
     }
 
     #[test]

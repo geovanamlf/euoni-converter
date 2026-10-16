@@ -11,8 +11,8 @@ use crate::{
     config::Settings,
     jobs::JobStore,
     routes::{
-        create_job_handler, download_handler, get_job_handler, get_job_status_handler,
-        health_handler, index_handler, system_handler, upload_handler,
+        download_handler, get_job_handler, get_job_status_handler, health_handler, index_handler,
+        system_handler, upload_handler,
     },
     worker::JobQueue,
 };
@@ -85,7 +85,6 @@ pub fn create_app(settings: Settings) -> Router {
         .route("/", get(index_handler))
         .route("/api/health", get(health_handler))
         .route("/api/system", get(system_handler))
-        .route("/api/jobs", post(create_job_handler))
         .route("/api/jobs/{id}", get(get_job_handler))
         .route("/api/jobs/{id}/status", get(get_job_status_handler))
         .route("/api/jobs/{id}/download", get(download_handler))
@@ -140,94 +139,6 @@ mod tests {
         let html = String::from_utf8(body.to_vec()).unwrap();
         assert!(html.contains("Euoni / Conversor"));
         assert!(html.contains("/api/upload"));
-    }
-
-    #[tokio::test]
-    async fn jobs_endpoint_creates_and_reads_job() {
-        let app = create_app(Settings::default());
-
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/jobs")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"{"input_name":"example.png","from":"png","to":"jpg"}"#,
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let created: serde_json::Value = serde_json::from_slice(
-            &axum::body::to_bytes(response.into_body(), usize::MAX)
-                .await
-                .unwrap(),
-        )
-        .unwrap();
-        let job_id = created["job"]["id"].as_str().unwrap();
-        let token = created["token"].as_str().unwrap();
-
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/jobs/{job_id}"))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/jobs/{job_id}"))
-                    .header("x-euoni-job-token", token)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn job_status_reports_progress() {
-        let app = create_app(Settings::default());
-
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/jobs")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"{"input_name":"example.png","from":"png","to":"jpg"}"#,
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/jobs/does-not-exist/status")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

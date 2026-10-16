@@ -11,10 +11,33 @@ pub fn run(command: &OsStr, args: &[&OsStr]) -> Result<Output, String> {
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(300);
-    run_with_timeout(command, args, Duration::from_secs(timeout))
+    run_with_timeout(command, args, Duration::from_secs(timeout), None)
 }
 
-fn run_with_timeout(command: &OsStr, args: &[&OsStr], timeout: Duration) -> Result<Output, String> {
+pub fn run_limited(
+    command: &OsStr,
+    args: &[&OsStr],
+    output_path: &std::path::Path,
+    max_output_size: u64,
+) -> Result<Output, String> {
+    let timeout = std::env::var("CONVERSION_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(300);
+    run_with_timeout(
+        command,
+        args,
+        Duration::from_secs(timeout),
+        Some((output_path, max_output_size)),
+    )
+}
+
+fn run_with_timeout(
+    command: &OsStr,
+    args: &[&OsStr],
+    timeout: Duration,
+    output_limit: Option<(&std::path::Path, u64)>,
+) -> Result<Output, String> {
     let mut command_builder = Command::new(command);
     command_builder
         .args(args)
@@ -44,23 +67,38 @@ fn run_with_timeout(command: &OsStr, args: &[&OsStr], timeout: Duration) -> Resu
                     .wait_with_output()
                     .map_err(|error| format!("failed to collect conversion result: {error}"));
             }
-            Ok(None) if Instant::now() >= deadline => {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+            Ok(None) => {
+                if let Some((output_path, max_output_size)) = output_limit
+                    && output_path
+                        .metadata()
+                        .map(|metadata| metadata.len())
+                        .unwrap_or(0)
+                        > max_output_size
+                {
+                    terminate(&mut child);
+                    return Err("conversion output exceeded the configured limit".to_string());
                 }
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("conversion timed out".to_string());
+                if Instant::now() >= deadline {
+                    terminate(&mut child);
+                    return Err("conversion timed out".to_string());
+                }
+                thread::sleep(Duration::from_millis(50));
             }
-            Ok(None) => thread::sleep(Duration::from_millis(50)),
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate(&mut child);
                 return Err(format!("failed to monitor conversion: {error}"));
             }
         }
     }
+}
+
+fn terminate(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 pub fn run_args(command: &str, args: &[&OsStr]) -> Result<Output, String> {
@@ -107,7 +145,29 @@ mod tests {
             OsStr::new("sleep"),
             &[OsStr::new("1")],
             std::time::Duration::from_millis(1),
+            None,
         );
         assert_eq!(result.unwrap_err(), "conversion timed out");
+    }
+
+    #[test]
+    fn terminates_a_process_when_output_exceeds_the_limit() {
+        let path = std::env::temp_dir().join(format!("euoni-process-limit-{}", std::process::id()));
+        let result = super::run_limited(
+            OsStr::new("sh"),
+            &[
+                OsStr::new("-c"),
+                OsStr::new("dd if=/dev/zero of=\"$1\" bs=1024 count=2; sleep 1"),
+                OsStr::new("sh"),
+                path.as_os_str(),
+            ],
+            &path,
+            1024,
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            "conversion output exceeded the configured limit"
+        );
+        let _ = std::fs::remove_file(path);
     }
 }

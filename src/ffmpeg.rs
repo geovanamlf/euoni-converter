@@ -92,8 +92,21 @@ impl FfmpegRunner {
     }
 
     pub fn run(&self, args: &[String]) -> Result<(), String> {
+        self.run_with_limit(args, u64::MAX)
+    }
+
+    pub fn run_with_limit(&self, args: &[String], max_output_size: u64) -> Result<(), String> {
         let refs = args.iter().map(std::ffi::OsStr::new).collect::<Vec<_>>();
-        let output = crate::process::run(std::ffi::OsStr::new(&self.binary), &refs)?;
+        let output_path = args
+            .last()
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| "ffmpeg output path is missing".to_string())?;
+        let output = crate::process::run_limited(
+            std::ffi::OsStr::new(&self.binary),
+            &refs,
+            &output_path,
+            max_output_size,
+        )?;
 
         if !output.status.success() {
             return Err("ffmpeg failed".to_string());

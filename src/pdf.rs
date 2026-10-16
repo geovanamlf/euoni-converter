@@ -27,9 +27,19 @@ impl PdfRunner {
     }
 
     pub fn run(&self, input: &Path, output: &Path) -> Result<(), String> {
+        self.run_with_limit(input, output, u64::MAX)
+    }
+
+    pub fn run_with_limit(
+        &self,
+        input: &Path,
+        output: &Path,
+        max_output_size: u64,
+    ) -> Result<(), String> {
         let args = Self::build_args(input, output);
         let refs = args.iter().map(std::ffi::OsStr::new).collect::<Vec<_>>();
-        let result = crate::process::run(self.binary.as_os_str(), &refs)?;
+        let result =
+            crate::process::run_limited(self.binary.as_os_str(), &refs, output, max_output_size)?;
 
         if !result.status.success() {
             return Err(format!("pdftoppm failed: {}", "pdftoppm failed"));
@@ -65,6 +75,15 @@ impl ImageToPdfRunner {
     }
 
     pub fn run(&self, input: &Path, output: &Path) -> Result<(), String> {
+        self.run_with_limit(input, output, u64::MAX)
+    }
+
+    pub fn run_with_limit(
+        &self,
+        input: &Path,
+        output: &Path,
+        max_output_size: u64,
+    ) -> Result<(), String> {
         let temp_dir = output
             .parent()
             .ok_or_else(|| "PDF output has no parent directory".to_string())?
@@ -78,7 +97,12 @@ impl ImageToPdfRunner {
             std::ffi::OsStr::new("8"),
             normalized.as_os_str(),
         ];
-        let image_result = crate::process::run(self.binary.as_os_str(), &image_args)?;
+        let image_result = crate::process::run_limited(
+            self.binary.as_os_str(),
+            &image_args,
+            &normalized,
+            max_output_size,
+        )?;
 
         if !image_result.status.success() || !normalized.exists() {
             let _ = std::fs::remove_dir_all(&temp_dir);
@@ -90,13 +114,23 @@ impl ImageToPdfRunner {
             std::ffi::OsStr::new("-o"),
             output.as_os_str(),
         ];
-        let pdf_result = crate::process::run(self.pdf_binary.as_os_str(), &pdf_args);
+        let pdf_result = crate::process::run_limited(
+            self.pdf_binary.as_os_str(),
+            &pdf_args,
+            output,
+            max_output_size,
+        );
         let _ = std::fs::remove_dir_all(&temp_dir);
         match pdf_result {
             Ok(result) if result.status.success() && output.exists() => Ok(()),
             Err(_) => {
                 let fallback_args = [input.as_os_str(), output.as_os_str()];
-                let fallback = crate::process::run(self.binary.as_os_str(), &fallback_args)?;
+                let fallback = crate::process::run_limited(
+                    self.binary.as_os_str(),
+                    &fallback_args,
+                    output,
+                    max_output_size,
+                )?;
                 if fallback.status.success() && output.exists() {
                     Ok(())
                 } else {
@@ -111,6 +145,15 @@ impl ImageToPdfRunner {
     }
 
     pub fn run_image(&self, input: &Path, output: &Path) -> Result<(), String> {
+        self.run_image_with_limit(input, output, u64::MAX)
+    }
+
+    pub fn run_image_with_limit(
+        &self,
+        input: &Path,
+        output: &Path,
+        max_output_size: u64,
+    ) -> Result<(), String> {
         let first_frame = format!("{}[0]", input.to_string_lossy());
         if output.extension().and_then(|extension| extension.to_str()) == Some("ico") {
             let args = [
@@ -121,7 +164,13 @@ impl ImageToPdfRunner {
                 std::ffi::OsStr::new("icon:auto-resize=256,128,64,48,32,16"),
                 output.as_os_str(),
             ];
-            return crate::process::run(self.binary.as_os_str(), &args).and_then(|result| {
+            return crate::process::run_limited(
+                self.binary.as_os_str(),
+                &args,
+                output,
+                max_output_size,
+            )
+            .and_then(|result| {
                 if result.status.success() && output.exists() {
                     Ok(())
                 } else {
@@ -131,7 +180,8 @@ impl ImageToPdfRunner {
         }
 
         let args = [std::ffi::OsStr::new(&first_frame), output.as_os_str()];
-        let result = crate::process::run(self.binary.as_os_str(), &args)?;
+        let result =
+            crate::process::run_limited(self.binary.as_os_str(), &args, output, max_output_size)?;
 
         if !result.status.success() {
             return Err(format!("ImageMagick failed: {}", "ImageMagick failed"));

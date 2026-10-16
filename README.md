@@ -44,7 +44,7 @@ docker compose down
 
 The Docker volume `euoni-data` stores the jobs database and converted files. The container runs as the unprivileged `euoni` user; the mounted `/data` volume must be writable by that user. The container filesystem is read-only and `/tmp` is a temporary filesystem used by conversion tools.
 
-The upload limit defaults to 512 MiB, the output limit to 1 GiB, and each external conversion has a 300-second timeout. These values can be changed through `.env`, but increasing them increases resource and denial-of-service risk.
+The upload limit defaults to 512 MiB, the output limit to 1 GiB, and each external conversion has a 300-second timeout. External runners are interrupted when their observable output exceeds the configured output limit, and the final artifact is validated again. These values can be changed through `.env`, but increasing them increases resource and denial-of-service risk.
 
 ## Run on a home server
 
