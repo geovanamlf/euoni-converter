@@ -1,9 +1,16 @@
 # Euoni Converter E2E
 
-These tests exercise the real browser interface against the Docker Compose
-application at `http://localhost:8080`. They cover Chromium and Firefox,
-format selection, browser uploads, progress states, download bytes, ZIP
-entries, error rendering, health status, and a mobile viewport.
+The UI tests in `tests/euoni.spec.js` exercise the original browser interface
+against the Docker Compose application at `http://localhost:8080`. They cover
+Chromium and Firefox, format selection exposed by the original interface,
+browser uploads, progress states, download bytes, error rendering, and a
+mobile viewport.
+
+The API integration tests in `tests/api.spec.js` use Playwright's
+`APIRequestContext` so backend capabilities that are not exposed by the
+restored interface remain covered. They verify `/api/health`, PDF upload,
+`png-zip`, `jpg-zip`, and `html-zip` jobs, status polling, token authorization,
+ZIP page entries, and HTML resource references.
 
 From this directory:
 
