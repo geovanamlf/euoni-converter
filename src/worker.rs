@@ -85,6 +85,8 @@ pub enum VideoConversion {
 pub enum PdfConversion {
     PdfToPng,
     PdfToJpg,
+    PdfToPngZip,
+    PdfToJpgZip,
     PngToPdf,
     JpgToPdf,
     WebpToPdf,
@@ -170,6 +172,8 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
         }
         ("pdf", "png") => Ok(ConversionKind::Pdf(PdfConversion::PdfToPng)),
         ("pdf", "jpg") => Ok(ConversionKind::Pdf(PdfConversion::PdfToJpg)),
+        ("pdf", "png-zip") => Ok(ConversionKind::Pdf(PdfConversion::PdfToPngZip)),
+        ("pdf", "jpg-zip") => Ok(ConversionKind::Pdf(PdfConversion::PdfToJpgZip)),
         ("png", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::PngToPdf)),
         ("jpg" | "jpeg", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::JpgToPdf)),
         ("webp", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::WebpToPdf)),
@@ -181,6 +185,7 @@ fn conversion_for_formats(from: &str, to: &str) -> Result<ConversionKind, String
         ("avif", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::AvifToPdf)),
         ("ico", "pdf") => Ok(ConversionKind::Pdf(PdfConversion::IcoToPdf)),
         ("pdf", "docx" | "txt" | "html" | "odt" | "rtf")
+        | ("pdf", "html-zip")
         | ("docx" | "txt" | "html" | "odt" | "rtf", "pdf") => {
             Ok(ConversionKind::Document(DocumentConversion))
         }
@@ -259,29 +264,23 @@ fn execute_image_conversion_with_limit(
         | ImageConversion::JpgToWebp => {
             let rgb = img.to_rgb8();
             match conversion {
-                ImageConversion::PngToJpg
-                | ImageConversion::WebpToJpg
-                | ImageConversion::JpgToWebp => {
-                    let format = if matches!(
-                        conversion,
-                        ImageConversion::PngToJpg
-                            | ImageConversion::WebpToJpg
-                            | ImageConversion::JpgToWebp
-                    ) {
-                        image::ImageFormat::Jpeg
-                    } else {
-                        image::ImageFormat::WebP
-                    };
+                ImageConversion::PngToJpg | ImageConversion::WebpToJpg => {
                     write_image_with_limit(
                         image::DynamicImage::ImageRgb8(rgb),
                         output_path,
-                        format,
+                        image::ImageFormat::Jpeg,
                         max_output_size,
                     )?;
                 }
-                ImageConversion::JpgToPng
-                | ImageConversion::WebpToPng
-                | ImageConversion::PngToWebp => {
+                ImageConversion::JpgToWebp | ImageConversion::PngToWebp => {
+                    write_image_with_limit(
+                        image::DynamicImage::ImageRgb8(rgb),
+                        output_path,
+                        image::ImageFormat::WebP,
+                        max_output_size,
+                    )?;
+                }
+                ImageConversion::JpgToPng | ImageConversion::WebpToPng => {
                     write_image_with_limit(
                         image::DynamicImage::ImageRgba8(img.to_rgba8()),
                         output_path,
@@ -290,7 +289,7 @@ fn execute_image_conversion_with_limit(
                     )?;
                 }
 
-                _ => unreachable!("ImageMagick conversions return before decoding"),
+                _ => unreachable!("unsupported in-process image conversion"),
             }
         }
         _ => unreachable!("ImageMagick conversions return before decoding"),
@@ -440,6 +439,12 @@ fn execute_pdf_conversion_with_limit(
         PdfConversion::PdfToPng | PdfConversion::PdfToJpg => {
             crate::pdf::PdfRunner::system().run_with_limit(input_path, output_path, max_output_size)
         }
+        PdfConversion::PdfToPngZip => crate::pdf::PdfRunner::system()
+            .run_all_pages_with_limit(input_path, output_path, "png", max_output_size)
+            .map(|_| ()),
+        PdfConversion::PdfToJpgZip => crate::pdf::PdfRunner::system()
+            .run_all_pages_with_limit(input_path, output_path, "jpg", max_output_size)
+            .map(|_| ()),
         PdfConversion::PngToPdf
         | PdfConversion::JpgToPdf
         | PdfConversion::WebpToPdf
@@ -523,6 +528,14 @@ impl JobQueue {
 }
 
 pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), String> {
+    let state = state.clone();
+    let job_id = job_id.to_string();
+    tokio::task::spawn_blocking(move || process_queued_job_sync(&state, &job_id))
+        .await
+        .map_err(|error| format!("worker task failed: {error}"))?
+}
+
+fn process_queued_job_sync(state: &AppState, job_id: &str) -> Result<(), String> {
     if !crate::storage::Storage::is_safe_job_id(job_id) {
         return Err("invalid job id".to_string());
     }
@@ -530,12 +543,8 @@ pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), St
         return Err("job not found".to_string());
     };
 
-    if state
-        .jobs
-        .update_status(job_id, JobStatus::Processing)
-        .is_none()
-    {
-        return Err("job disappeared before processing".to_string());
+    if !state.jobs.claim_processing(job_id) {
+        return Ok(());
     }
     if state.jobs.set_progress(job_id, 10).is_none() {
         return fail_job(
@@ -564,7 +573,7 @@ pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), St
         }
     };
     let input_path = job_dir.join(input_name);
-    let output_name = format!("converted.{}", job.payload.to);
+    let output_name = output_filename(&job.payload.to);
     if crate::storage::Storage::ensure_safe_filename(&output_name).is_err() {
         return fail_job(
             state,
@@ -572,6 +581,15 @@ pub async fn process_queued_job(state: &AppState, job_id: &str) -> Result<(), St
             &job_dir.join("converted.invalid"),
             "invalid persisted output filename",
         );
+    }
+
+    fn output_filename(target: &str) -> String {
+        match target {
+            "png-zip" => "converted.png.zip".to_string(),
+            "jpg-zip" => "converted.jpg.zip".to_string(),
+            "html-zip" => "converted.html.zip".to_string(),
+            other => format!("converted.{other}"),
+        }
     }
     let output_path = job_dir.join(&output_name);
 
@@ -1042,6 +1060,53 @@ mod tests {
         assert!(output.exists());
         let decoded = image::open(&output).unwrap();
         assert_eq!(decoded.color().channel_count(), 3);
+
+        let _ = fs::remove_dir_all(&tmpdir);
+    }
+
+    #[test]
+    fn executes_png_and_jpg_to_real_webp_files() {
+        let tmpdir =
+            std::env::temp_dir().join(format!("euoni-worker-webp-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmpdir);
+        fs::create_dir_all(&tmpdir).unwrap();
+
+        let source_png = tmpdir.join("source.png");
+        let source_jpg = tmpdir.join("source.jpg");
+        let output_webp_from_png = tmpdir.join("from-png.webp");
+        let output_webp_from_jpg = tmpdir.join("from-jpg.webp");
+        let image = image::RgbaImage::from_pixel(32, 32, image::Rgba([255, 0, 0, 255]));
+        image.save(&source_png).unwrap();
+        image::DynamicImage::ImageRgba8(image)
+            .save_with_format(&source_jpg, image::ImageFormat::Jpeg)
+            .unwrap();
+
+        execute_image_conversion(
+            &source_png,
+            &output_webp_from_png,
+            &ImageConversion::PngToWebp,
+        )
+        .unwrap();
+        execute_image_conversion(
+            &source_jpg,
+            &output_webp_from_jpg,
+            &ImageConversion::JpgToWebp,
+        )
+        .unwrap();
+
+        for output in [&output_webp_from_png, &output_webp_from_jpg] {
+            let bytes = fs::read(output).unwrap();
+            assert!(bytes.starts_with(b"RIFF"));
+            assert_eq!(&bytes[8..12], b"WEBP");
+            assert_eq!(
+                image::ImageReader::open(output)
+                    .unwrap()
+                    .with_guessed_format()
+                    .unwrap()
+                    .format(),
+                Some(image::ImageFormat::WebP)
+            );
+        }
 
         let _ = fs::remove_dir_all(&tmpdir);
     }

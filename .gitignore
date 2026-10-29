@@ -9,5 +9,20 @@
 *.log
 /test-files/
 /tests/
+!/tests/
+/tests/*
+!/tests/pdf_archives.rs
 /Dockerfile.test
 /Dockerfile.test.dockerignore
+/e2e/node_modules/
+/e2e/.generated/
+/e2e/playwright-report/
+/e2e/test-results/
+
+# Ambientes virtuais
+/env/
+/venv/
+/.venv/
+
+# Dependências locais
+/node_modules/

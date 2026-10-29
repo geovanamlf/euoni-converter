@@ -178,6 +178,18 @@ impl JobStore {
         self.get(id)
     }
 
+    pub fn claim_processing(&self, id: &str) -> bool {
+        self.connection
+            .lock()
+            .expect("job database lock poisoned")
+            .execute(
+                "UPDATE jobs SET status = 'processing' WHERE id = ?1 AND status = 'queued'",
+                params![id],
+            )
+            .map(|changed| changed == 1)
+            .expect("failed to claim job for processing")
+    }
+
     pub fn recover_pending(&self) -> Vec<String> {
         let connection = self.connection.lock().expect("job database lock poisoned");
         connection

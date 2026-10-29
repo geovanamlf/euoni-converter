@@ -91,9 +91,11 @@ cargo test
 - Images: PNG, JPG, JPEG, WEBP, BMP, TIFF, GIF, SVG, ICO, HEIC and AVIF between the supported image formats and PDF.
 - Audio: WAV, MP3, OGG, FLAC, AAC and M4A to MP3 or WAV.
 - Video: MP4, MKV, MOV, AVI and WEBM to MP4, MP3 or WAV.
-- PDF: PDF to PNG/JPG and images to PDF.
+- PDF: PDF to PNG/JPG (first page), PDF to numbered PNG/JPG pages in ZIP archives, and images to PDF. PDF to HTML remains available as a single HTML file; `HTML (ZIP)` exports the HTML together with its relative resources.
 - Documents: PDF to DOCX, TXT, HTML, ODT and RTF; DOCX, TXT, HTML, ODT and RTF to PDF. Office conversions require LibreOffice and PDF text/HTML extraction uses Poppler. Complex PDF layouts may not be preserved.
 
 The web interface only displays valid output formats for the selected input.
+
+The legacy `PDF -> PNG/JPG` options intentionally return only the first page. The `PNG/JPG — todas as páginas (ZIP)` options return one numbered image per page. `HTML completo + recursos (ZIP)` returns an `index.html` plus only the files generated for that PDF, preserving relative references.
 
 When exposed beyond loopback, place the service behind a trusted network boundary or reverse proxy with TLS and additional access controls. The per-job token protects individual results; it is not a user account system.

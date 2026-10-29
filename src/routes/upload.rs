@@ -151,6 +151,7 @@ pub async fn upload_handler(
         })?;
     let job_dir = storage.create_job_dir(&job.id).map_err(|_| {
         let _ = std::fs::remove_file(&temp_path);
+        state.jobs.delete(&job.id);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": "failed to create job directory" })),
@@ -160,6 +161,8 @@ pub async fn upload_handler(
     let saved_path = job_dir.join(&safe_name);
     std::fs::rename(&temp_path, &saved_path).map_err(|err| {
         let _ = std::fs::remove_file(&temp_path);
+        let _ = std::fs::remove_dir_all(&job_dir);
+        state.jobs.delete(&job.id);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": format!("failed to store upload: {err}") })),
@@ -167,7 +170,8 @@ pub async fn upload_handler(
     })?;
 
     if state.queue.enqueue(job.id.clone()).await.is_err() {
-        state.jobs.set_error(&job.id, "failed to enqueue job");
+        let _ = std::fs::remove_dir_all(&job_dir);
+        state.jobs.delete(&job.id);
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": "failed to enqueue job" })),

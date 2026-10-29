@@ -51,6 +51,94 @@ impl PdfRunner {
 
         Ok(())
     }
+
+    pub fn run_all_pages_with_limit(
+        &self,
+        input: &Path,
+        output: &Path,
+        format: &str,
+        max_output_size: u64,
+    ) -> Result<usize, String> {
+        let working_dir = output
+            .parent()
+            .ok_or_else(|| "PDF output has no parent directory".to_string())?
+            .join(format!(".pdf-pages-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&working_dir).map_err(|error| error.to_string())?;
+        let prefix = working_dir.join("page");
+        let format_arg = match format {
+            "jpg" => "-jpeg",
+            "png" => "-png",
+            _ => return Err("unsupported PDF image archive format".to_string()),
+        };
+        let args = [
+            std::ffi::OsStr::new(format_arg),
+            input.as_os_str(),
+            prefix.as_os_str(),
+        ];
+        let first_page = working_dir.join(format!("page-1.{format}"));
+        let result = crate::process::run_limited(
+            self.binary.as_os_str(),
+            &args,
+            &first_page,
+            max_output_size,
+        );
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&working_dir);
+                return Err(error);
+            }
+        };
+        if !result.status.success() {
+            let _ = std::fs::remove_dir_all(&working_dir);
+            return Err("pdftoppm failed".to_string());
+        }
+
+        let pages = sorted_page_files(&working_dir, format)?;
+        if pages.is_empty() {
+            let _ = std::fs::remove_dir_all(&working_dir);
+            return Err("pdftoppm did not create any page".to_string());
+        }
+        let total_size = pages.iter().try_fold(0_u64, |total, path| {
+            let size = std::fs::metadata(path)
+                .map_err(|error| error.to_string())?
+                .len();
+            total
+                .checked_add(size)
+                .filter(|size| *size <= max_output_size)
+                .ok_or_else(|| "conversion output exceeded the configured limit".to_string())
+        });
+        if let Err(error) = total_size {
+            let _ = std::fs::remove_dir_all(&working_dir);
+            return Err(error);
+        }
+
+        let archive_result =
+            crate::archive::create_zip_from_directory(&working_dir, output, max_output_size);
+        let _ = std::fs::remove_dir_all(&working_dir);
+        archive_result.map(|_| pages.len())
+    }
+}
+
+fn sorted_page_files(directory: &Path, format: &str) -> Result<Vec<PathBuf>, String> {
+    let extension = if format == "jpg" { "jpg" } else { "png" };
+    let mut pages = std::fs::read_dir(directory)
+        .map_err(|error| error.to_string())?
+        .map(|entry| {
+            entry
+                .map(|entry| entry.path())
+                .map_err(|error| error.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    pages.retain(|path| path.extension().and_then(|value| value.to_str()) == Some(extension));
+    pages.sort_by_key(|path| {
+        path.file_stem()
+            .and_then(|value| value.to_str())
+            .and_then(|value| value.rsplit('-').next())
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(u32::MAX)
+    });
+    Ok(pages)
 }
 
 #[derive(Debug, Clone, Default)]

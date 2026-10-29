@@ -229,6 +229,7 @@
     /* Hero */
     .hero {
       position: relative;
+      overflow: clip;
       padding: 54px 0 0;
     }
 
@@ -1158,8 +1159,24 @@
     const fileSize = document.querySelector('#file-size');
     const jobsContainer = document.querySelector('#jobs');
     const activityCount = document.querySelector('#activity-count');
+    const serverStatus = document.querySelector('#server-status');
+    const statusDot = document.querySelector('.status-dot');
 
     const jobs = new Map();
+    checkServerHealth();
+    setInterval(checkServerHealth, 30000);
+
+    async function checkServerHealth() {
+      try {
+        const response = await fetch('/api/health', { cache: 'no-store' });
+        if (!response.ok) throw new Error('health check failed');
+        serverStatus.textContent = 'Conversor online';
+        statusDot.style.background = 'var(--green)';
+      } catch (_) {
+        serverStatus.textContent = 'Conversor indisponível';
+        statusDot.style.background = 'var(--orange)';
+      }
+    }
 
     jobsContainer.addEventListener('click', event => {
       const download = event.target.closest('[data-download-job]');
@@ -1262,7 +1279,7 @@
       mov: ['mp4', 'mp3', 'wav'],
       avi: ['mp4', 'mp3', 'wav'],
       webm: ['mp4', 'mp3', 'wav'],
-      pdf: ['png', 'jpg', 'docx', 'txt', 'html', 'odt', 'rtf'],
+      pdf: ['png', 'jpg', 'png-zip', 'jpg-zip', 'docx', 'txt', 'html', 'html-zip', 'odt', 'rtf'],
       docx: ['pdf'],
       txt: ['pdf'],
       html: ['pdf'],
@@ -1275,7 +1292,14 @@
 
       format.innerHTML = targets.length
         ? targets
-            .map(target => `<option value="${target}">${target.toUpperCase()}</option>`)
+            .map(target => {
+              const labels = {
+                'png-zip': 'PNG — todas as páginas (ZIP)',
+                'jpg-zip': 'JPG — todas as páginas (ZIP)',
+                'html-zip': 'HTML completo + recursos (ZIP)'
+              };
+              return `<option value="${target}">${labels[target] || target.toUpperCase()}</option>`;
+            })
             .join('')
         : '<option value="">Formato não suportado</option>';
 
@@ -1422,17 +1446,28 @@
       const job = jobs.get(id);
       if (!job) return;
 
-      const response = await fetch(`/api/jobs/${id}/download`, {
-        headers: { 'X-Euoni-Job-Token': job.token }
-      });
-      if (!response.ok) return;
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `converted.${job.to}`;
-      link.click();
-      URL.revokeObjectURL(url);
+      try {
+        const response = await fetch(`/api/jobs/${id}/download`, {
+          headers: { 'X-Euoni-Job-Token': job.token }
+        });
+        if (!response.ok) {
+          throw new Error('Não foi possível baixar o arquivo.');
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const extension = {
+          'png-zip': 'png.zip',
+          'jpg-zip': 'jpg.zip',
+          'html-zip': 'html.zip'
+        }[job.to] || job.to;
+        link.download = `converted.${extension}`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        alert(error.message);
+      }
     }
 
     function label(status) {

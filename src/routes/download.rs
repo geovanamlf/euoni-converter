@@ -73,6 +73,7 @@ pub async fn download_handler(
         Some("html") => "text/html; charset=utf-8",
         Some("odt") => "application/vnd.oasis.opendocument.text",
         Some("rtf") => "application/rtf",
+        Some("zip") => "application/zip",
         _ => "application/octet-stream",
     };
 

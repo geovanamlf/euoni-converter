@@ -30,10 +30,18 @@ impl DocumentRunner {
             .extension()
             .and_then(|v| v.to_str())
             .unwrap_or_default();
-        let to = output
-            .extension()
-            .and_then(|v| v.to_str())
+        let output_name = output
+            .file_name()
+            .and_then(|value| value.to_str())
             .unwrap_or_default();
+        let to = if output_name.ends_with(".html.zip") {
+            "html-zip"
+        } else {
+            output
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+        };
 
         if from == "pdf" {
             if to == "txt" {
@@ -44,9 +52,15 @@ impl DocumentRunner {
                     max_output_size,
                 );
             }
+
             if to == "html" {
                 return self.run_pdf_to_html(input, output, max_output_size);
             }
+
+            if to == "html-zip" {
+                return self.run_pdf_to_html_zip(input, output, max_output_size);
+            }
+
             if matches!(to, "docx" | "odt" | "rtf") {
                 return self.run_pdf_to_editable_document(input, output, to, max_output_size);
             }
@@ -156,6 +170,47 @@ impl DocumentRunner {
             return Err("pdftohtml did not create the output file".to_string());
         }
         Ok(())
+    }
+
+    fn run_pdf_to_html_zip(
+        &self,
+        input: &Path,
+        output: &Path,
+        max_output_size: u64,
+    ) -> Result<(), String> {
+        let working_dir = output
+            .parent()
+            .ok_or_else(|| "HTML output has no parent directory".to_string())?
+            .join(format!(".pdf-html-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&working_dir).map_err(|error| error.to_string())?;
+        let html_path = working_dir.join("index.html");
+        let args = [
+            std::ffi::OsStr::new("-s"),
+            std::ffi::OsStr::new("-noframes"),
+            input.as_os_str(),
+            html_path.as_os_str(),
+        ];
+        let result = crate::process::run_limited(
+            self.pdftohtml.as_os_str(),
+            &args,
+            &html_path,
+            max_output_size,
+        );
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&working_dir);
+                return Err(error);
+            }
+        };
+        if !result.status.success() || !html_path.exists() {
+            let _ = std::fs::remove_dir_all(&working_dir);
+            return Err("pdftohtml failed".to_string());
+        }
+        let archive_result =
+            crate::archive::create_zip_from_directory(&working_dir, output, max_output_size);
+        let _ = std::fs::remove_dir_all(&working_dir);
+        archive_result.map(|_| ())
     }
 
     fn run_command(

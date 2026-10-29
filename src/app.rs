@@ -4,7 +4,8 @@ use axum::{
     routing::{get, post},
 };
 
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{Mutex, mpsc};
 use tower_http::services::ServeDir;
 
 use crate::{
@@ -34,15 +35,25 @@ pub fn create_app(settings: Settings) -> Router {
         queue: JobQueue::new(tx),
     };
 
-    let worker_state = state.clone();
-    tokio::spawn(async move {
-        let mut receiver = rx;
-        while let Some(job_id) = receiver.recv().await {
-            if let Err(err) = crate::worker::process_queued_job(&worker_state, &job_id).await {
-                tracing::error!(job_id = %job_id, error = %err, "queued job failed");
+    let receiver = Arc::new(Mutex::new(rx));
+    for _ in 0..settings.max_workers.max(1) {
+        let worker_state = state.clone();
+        let receiver = Arc::clone(&receiver);
+        tokio::spawn(async move {
+            loop {
+                let job_id = {
+                    let mut receiver = receiver.lock().await;
+                    receiver.recv().await
+                };
+                let Some(job_id) = job_id else {
+                    break;
+                };
+                if let Err(err) = crate::worker::process_queued_job(&worker_state, &job_id).await {
+                    tracing::error!(job_id = %job_id, error = %err, "queued job failed");
+                }
             }
-        }
-    });
+        });
+    }
 
     let recovery_state = state.clone();
     tokio::spawn(async move {
@@ -223,7 +234,7 @@ mod tests {
                 completed = true;
                 break;
             }
-            tokio::task::yield_now().await;
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
 
         assert!(completed, "uploaded job should complete");
@@ -332,7 +343,7 @@ mod tests {
                 completed = true;
                 break;
             }
-            tokio::task::yield_now().await;
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         assert!(completed, "PDF conversion should complete");
 
