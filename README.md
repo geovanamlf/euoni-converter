@@ -96,6 +96,52 @@ cargo test
 
 The web interface only displays valid output formats for the selected input.
 
+## PDF Toolkit API
+
+The backend exposes document operations without changing the existing web
+interface. Send a `multipart/form-data` request to
+`POST /api/pdf/operations` with one `operation` field containing JSON and one
+or more `file` fields. The response has the same `job_id` and capability
+`token` model as `/api/upload`; use the token in
+`X-Euoni-Job-Token` for status and download.
+
+Examples:
+
+```json
+{"type":"merge"}
+{"type":"split","ranges":[{"start":1,"end":3},{"start":4,"end":6}]}
+{"type":"reorder","pages":[3,1,2]}
+{"type":"rotate","angle":90,"pages":[2]}
+{"type":"compress","level":"balanced"}
+{"type":"watermark","text":"EUONI","position":"center","opacity":0.35,"size":36,"scale":0.25}
+```
+
+Merge accepts 2–32 PDFs. The other operations accept one PDF, split produces a
+ZIP containing valid PDFs, and all page numbers are one-based. Reorder permits
+repeated pages. PDF validation is content-based and encrypted or malformed
+documents are rejected. Ghostscript provides structural operations and
+compression; watermarking supports text or a separate `watermark_image` PNG
+multipart field:
+
+```json
+{"type":"watermark","text":null,"image":"mark.png","position":"bottom_right","opacity":0.5,"size":36,"scale":0.25,"pages":null}
+```
+
+PNG watermarking preserves alpha during composition, accepts scales from 5% to
+100%, and can target selected pages. The PNG is converted into a transparent
+per-page overlay and applied with qpdf, leaving the original PDF as the base;
+selectable text, vector content, page order, dimensions and links therefore
+remain in the base document. The overlay itself is raster content, and
+signatures, annotations whose appearance is rewritten, and exact PDF object
+structure are not guaranteed to remain byte-for-byte identical. Text
+watermarking and other structural operations avoid rasterizing the source
+pages. Compression levels are real Ghostscript
+profiles (`lossless` is a conservative/default rewrite, not a mathematical
+guarantee, followed by `balanced` and `aggressive`), but compression is not
+guaranteed to reduce size; `balanced` and `aggressive` may reduce image
+quality. Digital signatures, interactive forms, bookmarks, accessibility
+metadata and exact document structure are not guaranteed to survive rewriting.
+
 The legacy `PDF -> PNG/JPG` options intentionally return only the first page. The `PNG/JPG — todas as páginas (ZIP)` options return one numbered image per page. `HTML completo + recursos (ZIP)` returns an `index.html` plus only the files generated for that PDF, preserving relative references.
 
 When exposed beyond loopback, place the service behind a trusted network boundary or reverse proxy with TLS and additional access controls. The per-job token protects individual results; it is not a user account system.

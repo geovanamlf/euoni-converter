@@ -573,7 +573,23 @@ fn process_queued_job_sync(state: &AppState, job_id: &str) -> Result<(), String>
         }
     };
     let input_path = job_dir.join(input_name);
-    let output_name = output_filename(&job.payload.to);
+    let output_name = output_filename(
+        &job.payload.to,
+        if job.payload.to == "pdf-operation" {
+            std::fs::read_to_string(job_dir.join("operation.json"))
+                .ok()
+                .and_then(|raw| serde_json::from_str::<crate::pdf_tools::PdfManifest>(&raw).ok())
+                .map(|manifest| {
+                    matches!(
+                        manifest.operation,
+                        crate::pdf_tools::PdfOperation::Split { .. }
+                    )
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        },
+    );
     if crate::storage::Storage::ensure_safe_filename(&output_name).is_err() {
         return fail_job(
             state,
@@ -583,11 +599,13 @@ fn process_queued_job_sync(state: &AppState, job_id: &str) -> Result<(), String>
         );
     }
 
-    fn output_filename(target: &str) -> String {
+    fn output_filename(target: &str, split_pdf: bool) -> String {
         match target {
             "png-zip" => "converted.png.zip".to_string(),
             "jpg-zip" => "converted.jpg.zip".to_string(),
             "html-zip" => "converted.html.zip".to_string(),
+            "pdf-operation" if split_pdf => "converted.pdf.zip".to_string(),
+            "pdf-operation" => "converted.pdf".to_string(),
             other => format!("converted.{other}"),
         }
     }
@@ -613,12 +631,22 @@ fn process_queued_job_sync(state: &AppState, job_id: &str) -> Result<(), String>
         }
     }
 
-    match execute_job_with_limit(
-        &job,
-        &input_path,
-        &output_path,
-        state.settings.max_output_size,
-    ) {
+    let execution = if job.payload.to == "pdf-operation" {
+        crate::pdf_tools::execute(
+            &job_dir.join("operation.json"),
+            &job_dir,
+            &output_path,
+            state.settings.max_output_size,
+        )
+    } else {
+        execute_job_with_limit(
+            &job,
+            &input_path,
+            &output_path,
+            state.settings.max_output_size,
+        )
+    };
+    match execution {
         Ok(_) => complete_job(state, job_id, &output_name, &output_path),
         Err(err) => {
             tracing::error!(job_id = %job_id, error = %err, "conversion failed");

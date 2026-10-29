@@ -13,7 +13,7 @@ use crate::{
     jobs::JobStore,
     routes::{
         download_handler, get_job_handler, get_job_status_handler, health_handler, index_handler,
-        system_handler, upload_handler,
+        pdf_operation_handler, system_handler, upload_handler,
     },
     worker::JobQueue,
 };
@@ -100,6 +100,7 @@ pub fn create_app(settings: Settings) -> Router {
         .route("/api/jobs/{id}/status", get(get_job_status_handler))
         .route("/api/jobs/{id}/download", get(download_handler))
         .route("/api/upload", post(upload_handler))
+        .route("/api/pdf/operations", post(pdf_operation_handler))
         .nest_service("/assets", ServeDir::new("web/assets"))
         .layer(DefaultBodyLimit::max(settings.max_upload_size as usize))
         .with_state(state)

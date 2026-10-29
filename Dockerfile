@@ -13,7 +13,7 @@ RUN touch src/main.rs && cargo build --release
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg poppler-utils imagemagick img2pdf libheif-examples libx265-199 zip unzip librsvg2-bin libreoffice ca-certificates gosu \
+    && apt-get install -y --no-install-recommends ffmpeg poppler-utils ghostscript qpdf imagemagick img2pdf libheif-examples libx265-199 zip unzip librsvg2-bin libreoffice ca-certificates gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/euoni-converter /usr/local/bin/euoni-converter

@@ -11,7 +11,15 @@ pub fn run(command: &OsStr, args: &[&OsStr]) -> Result<Output, String> {
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(300);
-    run_with_timeout(command, args, Duration::from_secs(timeout), None)
+    run_with_timeout(command, args, Duration::from_secs(timeout), None, false)
+}
+
+pub fn run_capture(command: &OsStr, args: &[&OsStr]) -> Result<Output, String> {
+    let timeout = std::env::var("CONVERSION_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(300);
+    run_with_timeout(command, args, Duration::from_secs(timeout), None, true)
 }
 
 pub fn run_limited(
@@ -29,6 +37,7 @@ pub fn run_limited(
         args,
         Duration::from_secs(timeout),
         Some((output_path, max_output_size)),
+        false,
     )
 }
 
@@ -37,11 +46,16 @@ fn run_with_timeout(
     args: &[&OsStr],
     timeout: Duration,
     output_limit: Option<(&std::path::Path, u64)>,
+    capture_output: bool,
 ) -> Result<Output, String> {
     let mut command_builder = Command::new(command);
     command_builder
         .args(args)
-        .stdout(Stdio::null())
+        .stdout(if capture_output {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stderr(Stdio::null());
     #[cfg(unix)]
     {
@@ -146,6 +160,7 @@ mod tests {
             &[OsStr::new("1")],
             std::time::Duration::from_millis(1),
             None,
+            false,
         );
         assert_eq!(result.unwrap_err(), "conversion timed out");
     }
